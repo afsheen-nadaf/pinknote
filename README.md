@@ -1,6 +1,7 @@
 # pinknote
 to-do list/planner app
 
+
 Delete Your pinknote Account
 
 If you would like to delete your account and associated data from the pinknote app, you can:
@@ -11,11 +12,13 @@ Go to settings > delete account.
 
 What we delete:
 
-Your email and name
+1. Your email and name
 
-Firebase User ID (UID)
+2 Firebase User ID (UID)
 
-Any tasks or notes saved under your account
+3. Any tasks or notes saved under your account
+
+
 
 Timeframe:
 Your account and all data will be permanently deleted within 7 days of your request.
