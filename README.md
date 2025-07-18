@@ -14,7 +14,7 @@ What we delete:
 
 1. Your email and name
 
-2 Firebase User ID (UID)
+2. Firebase User ID (UID)
 
 3. Any tasks or notes saved under your account
 
