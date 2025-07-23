@@ -1,0 +1,62 @@
+{
+  "project_info": {
+    "project_number": "700410046501",
+    "project_id": "to-do-list-planner",
+    "storage_bucket": "to-do-list-planner.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:700410046501:android:4e8f105323cf5e474eb7cc",
+        "android_client_info": {
+          "package_name": "com.afsheen.pinknote"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "700410046501-oi8u3117rbt1ujfm7g301sv16vtcuthv.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.afsheen.pinknote",
+            "certificate_hash": "bde5eb463c942372c69c5d90f9047269d46412af"
+          }
+        },
+        {
+          "client_id": "700410046501-vg9esr938tgleqs5tjbk47ep486559ns.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.afsheen.pinknote",
+            "certificate_hash": "12205ec7a2340cc0363c305ae374ce12c1df696b"
+          }
+        },
+        {
+          "client_id": "700410046501-593r338b4uds73ph2mc0bj9fk0h0nvuu.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBRXvgCWD7Pnxc_YTQJts3dEFcNWguYZcw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "700410046501-593r338b4uds73ph2mc0bj9fk0h0nvuu.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "700410046501-m0phvhfg2ghut0luuqgiri9ed8vt337v.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.pinknote"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pinknote - Google Play Feature Graphic</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #fff7f9; /* A very light pastel pink */
+        }
+        .feature-graphic {
+            width: 100%;
+            max-width: 1024px;
+            aspect-ratio: 1024 / 500;
+            font-family: 'Quicksand', sans-serif;
+            position: relative;
+            overflow: hidden;
+            /* A calmer, softer pastel gradient */
+            background: linear-gradient(135deg, #fff0f5, #fdebf1, #f9e7f8);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 40px;
+            box-shadow: 0 10px 30px rgba(100, 80, 90, 0.1);
+        }
+        .text-shadow {
+            /* A soft white glow to lift the text from the pastel background */
+            text-shadow: 0px 2px 4px rgba(255, 255, 255, 0.5);
+        }
+
+        /* Softer sparkle animation */
+        .sparkle {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            background-color: white;
+            border-radius: 50%;
+            opacity: 0;
+            filter: blur(1px); /* Soft focus effect */
+            animation: twinkle 5s infinite;
+        }
+        .sparkle:nth-child(1) { top: 10%; left: 20%; animation-delay: 0s; }
+        .sparkle:nth-child(2) { top: 80%; left: 15%; animation-delay: 0.5s; }
+        .sparkle:nth-child(3) { top: 30%; left: 40%; animation-delay: 1s; }
+        .sparkle:nth-child(4) { top: 50%; left: 90%; animation-delay: 1.5s; }
+        .sparkle:nth-child(5) { top: 15%; left: 70%; animation-delay: 2s; }
+        .sparkle:nth-child(6) { top: 90%; left: 80%; animation-delay: 2.5s; }
+        .sparkle:nth-child(7) { top: 60%; left: 5%; animation-delay: 3s; }
+
+        @keyframes twinkle {
+            0%, 100% { opacity: 0; transform: scale(0.5); }
+            50% { opacity: 0.8; transform: scale(1); }
+        }
+
+        /* Stylized App UI Mockup */
+        .app-mockup {
+            background: rgba(255, 255, 255, 0.6);
+            border-radius: 24px;
+            padding: 20px;
+            width: 380px;
+            height: auto;
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.08);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transform: rotate(-4deg);
+            transition: transform 0.3s ease;
+        }
+        .app-mockup:hover {
+            transform: rotate(-2deg) scale(1.02);
+        }
+        .task-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 12px;
+            font-size: 16px;
+            color: #6d6d6d;
+        }
+        .task-item .checkbox {
+            width: 20px;
+            height: 20px;
+            border: 2px solid #f4c2d4; /* Softer pink */
+            border-radius: 50%;
+            margin-right: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .task-item.completed .checkbox {
+            background-color: #f4c2d4;
+            border-color: #f4c2d4;
+        }
+        .task-item.completed span {
+            text-decoration: line-through;
+            color: #b0b0b0;
+        }
+    </style>
+</head>
+<body>
+    <div class="feature-graphic rounded-xl">
+        <!-- Sparkle Decorations -->
+        <div class="sparkle"></div>
+        <div class="sparkle"></div>
+        <div class="sparkle"></div>
+        <div class="sparkle"></div>
+        <div class="sparkle"></div>
+        <div class="sparkle"></div>
+        <div class="sparkle"></div>
+
+        <!-- Left Side: Title and Tagline -->
+        <div class="z-10 flex flex-col items-start text-left">
+            <!-- Container for Logo and Title -->
+            <div class="flex items-center gap-4 mb-2">
+                <img src="assets/icon_bgless.png" alt="Pinknote App Logo" class="w-20 h-20 rounded-2xl shadow-xl">
+                <h1 class="text-6xl font-bold text-pink-400 text-shadow">pinknote</h1>
+            </div>
+            <p class="mt-1 text-xl text-pink-400/90 text-shadow max-w-md">
+                a calm pastel planner for tasks, events, moods & soft focus
+            </p>
+        </div>
+
+        <!-- Right Side: App UI Mockup -->
+        <div class="z-10 app-mockup">
+            <h2 class="font-bold text-xl text-pink-400 mb-4">today's tasks ♡</h2>
+            <div class="task-item completed">
+                <div class="checkbox">
+                    <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>
+                </div>
+                <span>finish project proposal</span>
+            </div>
+            <div class="task-item">
+                <div class="checkbox"></div>
+                <span>buy groceries for dinner</span>
+            </div>
+            <div class="task-item">
+                <div class="checkbox"></div>
+                <span>call mom</span>
+            </div>
+             <div class="task-item">
+                <div class="checkbox"></div>
+                <span>water the plants</span>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
