@@ -22,12 +22,14 @@ class NotificationService {
   Future<void> init() async {
     tz.initializeTimeZones();
     try {
-      // Attempt to set the local timezone dynamically
+      // Attempt to set the local timezone dynamically based on the device's timezone
       tz.setLocalLocation(tz.getLocation(tz.local.name));
+      debugPrint("Timezone set to device's local timezone: ${tz.local.name}.");
     } catch (e) {
       debugPrint("Could not set local timezone automatically: $e");
       // Fallback to a default timezone if the local one isn't found
       tz.setLocalLocation(tz.getLocation('Etc/UTC'));
+      debugPrint("Falling back to UTC timezone.");
     }
 
     // Load notification preference
@@ -195,14 +197,14 @@ class NotificationService {
       _dailyGoodMorningId,
       'good morning! ☀️',
       'time to get started with your day and be productive!',
-      // FIX: Changed schedule time to 9:00 AM to better accommodate timezone issues.
+      // Schedule time for 9:00 AM in the user's local timezone
       _nextInstanceOf(9, 0),
       platformChannelSpecifics,
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
       matchDateTimeComponents: DateTimeComponents.time,
       payload: jsonEncode({'screen': 'home'}), // Payload for redirection
     );
-    debugPrint("Daily good morning notification scheduled for 9:00 AM.");
+    debugPrint("Daily good morning notification scheduled for 9:00 AM in local timezone.");
   }
 
   /// Schedules a daily mood tracking reminder.
@@ -228,14 +230,14 @@ class NotificationService {
       _dailyMoodReminderId,
       'how are you feeling?',
       "don't forget to track your mood today <3",
-      // FIX: Changed schedule time to 9:00 PM to better accommodate timezone issues.
+      // Schedule time for 9:00 PM in the user's local timezone
       _nextInstanceOf(21, 0),
       platformDetails,
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
       matchDateTimeComponents: DateTimeComponents.time,
       payload: jsonEncode({'screen': 'mood_tracker'}), // Payload for redirection
     );
-    debugPrint("Daily mood reminder notification scheduled for 9:00 PM.");
+    debugPrint("Daily mood reminder notification scheduled for 9:00 PM in local timezone.");
   }
 
   /// Schedules a one-time reminder for a task or event.
