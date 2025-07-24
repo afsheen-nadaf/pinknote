@@ -43,11 +43,54 @@ class CalendarScreen extends StatefulWidget {
 class _CalendarScreenState extends State<CalendarScreen> {
   DateTime _focusedDay = DateTime.now();
   DateTime? _selectedDay;
+  final Set<String> _dismissedEventIds = {};
 
   @override
   void initState() {
     super.initState();
     _selectedDay = _focusedDay;
+  }
+
+  void _deleteEventWithUndo(Event event) {
+    soundService.playSwipeDeleteSound();
+    notificationService.cancelNotification(event.id.hashCode);
+    
+    setState(() {
+      _dismissedEventIds.add(event.id);
+    });
+    widget.onDeleteEvent(event.id);
+
+    final theme = Theme.of(context);
+    ScaffoldMessenger.of(context)
+      ..removeCurrentSnackBar()
+      ..showSnackBar(SnackBar(
+        content: Text(
+          'event "${event.title.toLowerCase()}" deleted.',
+          style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurface),
+        ),
+        action: SnackBarAction(
+          label: 'undo',
+          textColor: AppColors.primaryPink,
+          onPressed: () {
+            _undoDelete(event);
+          },
+        ),
+        backgroundColor: theme.cardColor,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(15.0),
+          side: BorderSide(color: AppColors.primaryPink.withOpacity(0.3)),
+        ),
+        margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
+        elevation: 6.0,
+      ));
+  }
+
+  void _undoDelete(Event event) {
+    setState(() {
+      _dismissedEventIds.remove(event.id);
+    });
+    widget.onAddEvent(event);
   }
 
   List<Event> _getEventsForDay(DateTime day) {
@@ -56,6 +99,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
     final normalizedToday = DateTime(today.year, today.month, today.day);
 
     return widget.allEvents.where((event) {
+      if (_dismissedEventIds.contains(event.id)) return false;
+
       final normalizedEventStartDate = DateTime(event.date.year, event.date.month, event.date.day);
       final normalizedEventEndDate = event.endDate != null
           ? DateTime(event.endDate!.year, event.endDate!.month, event.endDate!.day)
@@ -74,6 +119,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
     final today = DateTime(now.year, now.month, now.day);
 
     List<Event> upcoming = widget.allEvents.where((event) {
+      if (_dismissedEventIds.contains(event.id)) return false;
       final normalizedStartDate = DateTime(event.date.year, event.date.month, event.date.day);
       final normalizedEndDate = event.endDate != null ? DateTime(event.endDate!.year, event.endDate!.month, event.endDate!.day) : normalizedStartDate;
       return normalizedEndDate.isAfter(today) || normalizedEndDate.isAtSameMomentAs(today);
@@ -90,6 +136,19 @@ class _CalendarScreenState extends State<CalendarScreen> {
     });
     return upcoming;
   }
+  
+  List<Event> _getPastEvents() {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    List<Event> past = widget.allEvents.where((event) {
+       if (_dismissedEventIds.contains(event.id)) return false;
+      final eventEndDate = event.endDate ?? event.date;
+      final normalizedEventEndDate = DateTime(eventEndDate.year, eventEndDate.month, eventEndDate.day);
+      return normalizedEventEndDate.isBefore(today);
+    }).toList();
+    past.sort((a, b) => b.date.compareTo(a.date)); // Sort descending
+    return past;
+  }
 
   void _showDayEventsModal(DateTime day) {
     soundService.playModalOpeningSound();
@@ -103,8 +162,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
         onAddEvent: widget.onAddEvent,
         onUpdateEvent: widget.onUpdateEvent,
         onDeleteEvent: (String eventId) {
-          notificationService.cancelNotification(eventId.hashCode);
-          widget.onDeleteEvent(eventId);
+          final eventToDelete = widget.allEvents.firstWhere((e) => e.id == eventId, orElse: () => widget.allEvents.first);
+          _deleteEventWithUndo(eventToDelete);
         },
         availableCategories: widget.availableCategories,
         onAddCategory: widget.onAddCategory,
@@ -132,8 +191,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
           }
         },
         onDelete: (String eventId) {
-          notificationService.cancelNotification(eventId.hashCode);
-          widget.onDeleteEvent(eventId);
+          final eventToDelete = widget.allEvents.firstWhere((e) => e.id == eventId, orElse: () => widget.allEvents.first);
+          _deleteEventWithUndo(eventToDelete);
         },
         availableCategories: widget.availableCategories,
         onAddCategory: widget.onAddCategory,
@@ -146,20 +205,24 @@ class _CalendarScreenState extends State<CalendarScreen> {
   @override
   Widget build(BuildContext context) {
     final upcomingEvents = _getUpcomingEvents();
+    final pastEvents = _getPastEvents();
     final theme = Theme.of(context);
     final isDarkMode = theme.brightness == Brightness.dark;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 80.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            //const SizedBox(height: 20),
             _buildCalendarCard(upcomingEvents),
             const SizedBox(height: 10),
             _buildUpcomingEventsSection(upcomingEvents),
+            if (pastEvents.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              _buildPastEventsSection(pastEvents),
+            ]
           ],
         ),
       ),
@@ -190,34 +253,70 @@ class _CalendarScreenState extends State<CalendarScreen> {
     final calculatedChildAspectRatio = itemWidth > 0 ? itemWidth / (itemWidth + 10) : 1.0;
 
     return Card(
+      
       elevation: 4.0,
       shadowColor: AppColors.shadowSoft.withOpacity(0.3),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15.0)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20.0),
+        side: BorderSide(color: AppColors.borderLight.withOpacity(0.5), width: 1),
+      ),
       color: theme.cardColor,
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            Stack(
+              alignment: Alignment.center,
               children: [
-                IconButton(
-                  icon: const Icon(Icons.arrow_back_ios_rounded, color: AppColors.primaryPink),
-                  onPressed: () => setState(() {
-                    _focusedDay = DateTime(_focusedDay.year, _focusedDay.month - 1, 1);
-                    _selectedDay = _focusedDay;
-                  }),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        DateFormat('MMMM').format(_focusedDay).toLowerCase(),
+                        style: GoogleFonts.quicksand(
+                          fontSize: 26,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.primaryPink,
+                        ),
+                      ),
+                      Text(
+                        DateFormat('yyyy').format(_focusedDay),
+                        style: GoogleFonts.quicksand(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w400,
+                          color: theme.colorScheme.onSurface.withOpacity(0.8),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                Text(
-                  DateFormat('MMMM yyyy').format(_focusedDay).toLowerCase(),
-                  style: theme.textTheme.headlineSmall,
-                ),
-                IconButton(
-                  icon: const Icon(Icons.arrow_forward_ios_rounded, color: AppColors.primaryPink),
-                  onPressed: () => setState(() {
-                    _focusedDay = DateTime(_focusedDay.year, _focusedDay.month + 1, 1);
-                    _selectedDay = _focusedDay;
-                  }),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
+                        onPressed: () => setState(() {
+                          _focusedDay = DateTime(_focusedDay.year, _focusedDay.month - 1, 1);
+                          _selectedDay = _focusedDay;
+                        }),
+                        color: theme.colorScheme.onSurface.withOpacity(0.7),
+                        splashRadius: 20,
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.arrow_forward_ios_rounded, size: 18),
+                        onPressed: () => setState(() {
+                          _focusedDay = DateTime(_focusedDay.year, _focusedDay.month + 1, 1);
+                          _selectedDay = _focusedDay;
+                        }),
+                        color: theme.colorScheme.onSurface.withOpacity(0.7),
+                        splashRadius: 20,
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -344,14 +443,20 @@ class _CalendarScreenState extends State<CalendarScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'upcoming events',
-              style: GoogleFonts.poppins(
-                fontSize: 22,
-                fontWeight: FontWeight.w600,
-                color: AppColors.primaryPink,
-                letterSpacing: -0.5,
-              ),
+            Row(
+              children: [
+                const Icon(Icons.event_note_rounded, color: AppColors.primaryPink),
+                const SizedBox(width: 8),
+                Text(
+                  'upcoming events',
+                  style: GoogleFonts.poppins(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.primaryPink,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 15),
             if (upcomingEvents.isEmpty)
@@ -374,15 +479,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(15.0),
                       child: Dismissible(
-                        key: ValueKey(event.id),
+                        key: ObjectKey(event),
                         direction: DismissDirection.endToStart,
                         onDismissed: (direction) {
-                          soundService.playSwipeDeleteSound();
-                          notificationService.cancelNotification(event.id.hashCode);
-                          widget.onDeleteEvent(event.id);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('event "${event.title.toLowerCase()}" deleted.', style: GoogleFonts.poppins())),
-                          );
+                          _deleteEventWithUndo(event);
                         },
                         background: Container(
                           decoration: BoxDecoration(
@@ -393,7 +493,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                           padding: const EdgeInsets.symmetric(horizontal: 20),
                           child: const Icon(Icons.delete_sweep_rounded, color: Colors.white),
                         ),
-                        child: _buildUpcomingEventItem(event),
+                        child: _buildEventItem(event),
                       ),
                     ),
                   );
@@ -404,8 +504,78 @@ class _CalendarScreenState extends State<CalendarScreen> {
       ),
     );
   }
+  
+  Widget _buildPastEventsSection(List<Event> pastEvents) {
+    final theme = Theme.of(context);
+    return Card(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20.0),
+      ),
+      elevation: 2.0,
+      shadowColor: AppColors.shadowSoft.withOpacity(0.2),
+      color: theme.cardColor,
+      child: Theme(
+        data: theme.copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          title: Row(
+            children: [
+              const Icon(Icons.history_rounded, color: AppColors.primaryPink),
+              const SizedBox(width: 8),
+              Text(
+                'past events',
+                style: theme.textTheme.labelLarge?.copyWith(
+                  color: AppColors.primaryPink,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          iconColor: AppColors.primaryPink,
+          collapsedIconColor: AppColors.primaryPink,
+          tilePadding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 4.0),
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 15),
+              child: ListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: pastEvents.length,
+                itemBuilder: (context, index) {
+                  final event = pastEvents[index];
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4.0),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(15.0),
+                      child: Dismissible(
+                        key: ObjectKey(event),
+                        direction: DismissDirection.endToStart,
+                        onDismissed: (direction) => _deleteEventWithUndo(event),
+                        background: Container(
+                          decoration: BoxDecoration(
+                            color: AppColors.errorRed,
+                            borderRadius: BorderRadius.circular(15.0),
+                          ),
+                          alignment: Alignment.centerRight,
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          child: const Icon(Icons.delete_sweep_rounded, color: Colors.white),
+                        ),
+                        child: Opacity(
+                          opacity: 0.7,
+                          child: _buildEventItem(event)
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
-  Widget _buildUpcomingEventItem(Event event) {
+  Widget _buildEventItem(Event event) {
     final theme = Theme.of(context);
     final eventColor = event.color;
 

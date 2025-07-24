@@ -23,6 +23,7 @@ class _MoodTrackerScreenState extends State<MoodTrackerScreen> {
   final TextEditingController _noteController = TextEditingController();
   final FocusNode _noteFocusNode = FocusNode(); // FocusNode for the notes text field
   String? _selectedNoteId; // To track which note is being edited
+  final Set<String> _dismissedNoteIds = {};
 
   final List<Map<String, dynamic>> _moodOptions = [
     {'icon': Icons.sentiment_very_satisfied_rounded, 'rating': 5, 'color': AppColors.accentGreen},
@@ -110,8 +111,51 @@ class _MoodTrackerScreenState extends State<MoodTrackerScreen> {
     _noteFocusNode.unfocus(); // Unfocus after saving
   }
 
-  void _deletePersonalNote(String noteId) async {
-    await widget.firestoreService.deletePersonalNote(noteId);
+  void _deletePersonalNoteWithUndo(PersonalNote note) {
+    soundService.playSwipeDeleteSound();
+
+    setState(() {
+      _dismissedNoteIds.add(note.id);
+    });
+
+    widget.firestoreService.deletePersonalNote(note.id);
+
+    final theme = Theme.of(context);
+    final snackbarContent = note.content.length > 30
+        ? '${note.content.substring(0, 30)}...'
+        : note.content;
+
+    ScaffoldMessenger.of(context)
+      ..removeCurrentSnackBar()
+      ..showSnackBar(SnackBar(
+        content: Text(
+          'note deleted: "$snackbarContent"',
+          style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurface),
+        ),
+        action: SnackBarAction(
+          label: 'undo',
+          textColor: AppColors.primaryPink,
+          onPressed: () {
+            _undoDeleteNote(note);
+          },
+        ),
+        backgroundColor: theme.cardColor,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(15.0),
+          side: BorderSide(color: AppColors.primaryPink.withOpacity(0.3)),
+        ),
+        margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
+        elevation: 6.0,
+      ));
+  }
+
+  void _undoDeleteNote(PersonalNote note) {
+    setState(() {
+      _dismissedNoteIds.remove(note.id);
+    });
+    // This will re-add the note to firestore. The stream listener will update the UI.
+    widget.firestoreService.addPersonalNote(note);
   }
 
   void _goToPreviousMonth() {
@@ -166,26 +210,61 @@ class _MoodTrackerScreenState extends State<MoodTrackerScreen> {
     return Card(
       elevation: 4.0,
       shadowColor: AppColors.shadowSoft.withOpacity(0.3),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15.0)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20.0),
+        side: BorderSide(color: AppColors.borderLight.withOpacity(0.5), width: 1),
+      ),
       color: theme.cardColor,
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            Stack(
+              alignment: Alignment.center,
               children: [
-                IconButton(
-                  icon: const Icon(Icons.arrow_back_ios_rounded, color: AppColors.primaryPink),
-                  onPressed: _goToPreviousMonth,
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        DateFormat('MMMM').format(_selectedMonth).toLowerCase(),
+                        style: GoogleFonts.quicksand(
+                          fontSize: 26,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.primaryPink,
+                        ),
+                      ),
+                      Text(
+                        DateFormat('yyyy').format(_selectedMonth),
+                        style: GoogleFonts.quicksand(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w400,
+                          color: theme.colorScheme.onSurface.withOpacity(0.8),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                Text(
-                  DateFormat('MMMM yyyy').format(_selectedMonth).toLowerCase(),
-                  style: theme.textTheme.headlineSmall,
-                ),
-                IconButton(
-                  icon: const Icon(Icons.arrow_forward_ios_rounded, color: AppColors.primaryPink),
-                  onPressed: _goToNextMonth,
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
+                        onPressed: _goToPreviousMonth,
+                        color: theme.colorScheme.onSurface.withOpacity(0.7),
+                        splashRadius: 20,
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.arrow_forward_ios_rounded, size: 18),
+                        onPressed: _goToNextMonth,
+                        color: theme.colorScheme.onSurface.withOpacity(0.7),
+                        splashRadius: 20,
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -327,98 +406,93 @@ class _MoodTrackerScreenState extends State<MoodTrackerScreen> {
 
   Widget _buildPersonalNotesSection() {
     final theme = Theme.of(context);
-    // Changed borderColor to match the opacity of the calendar dates border
     final borderColor = AppColors.borderLight.withOpacity(0.5); 
+    final displayedNotes = _personalNotes.where((note) => !_dismissedNoteIds.contains(note.id)).toList();
 
     return Card(
       elevation: 4.0,
       shadowColor: AppColors.shadowSoft.withOpacity(0.3),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15.0)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20.0),
+        side: BorderSide(color: AppColors.borderLight.withOpacity(0.5), width: 1),
+      ),
       color: theme.cardColor,
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'personal notes',
-              style: GoogleFonts.poppins(
-                fontSize: 22,
-                fontWeight: FontWeight.w600,
-                color: AppColors.primaryPink,
-                letterSpacing: -0.5,
-              ),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: _noteController,
-              focusNode: _noteFocusNode,
-              maxLines: 3,
-              decoration: InputDecoration(
-                hintText: 'write a new note...',
-                hintStyle: GoogleFonts.poppins(color: theme.hintColor),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: BorderSide(color: borderColor, width: 1.0),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: BorderSide(color: borderColor, width: 1.0),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: const BorderSide(color: AppColors.primaryPink, width: 1.5),
-                ),
-                filled: true,
-                fillColor: Colors.transparent,
-                suffixIcon: Padding(
-                  padding: const EdgeInsets.only(right: 8.0),
-                  child: InkWell(
-                    onTap: _savePersonalNote,
-                    borderRadius: BorderRadius.circular(24),
-                    child: Container(
-                      width: 48,
-                      height: 48,
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.onSurface.withOpacity(0.08),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        _selectedNoteId == null ? Icons.add_rounded : Icons.save_rounded,
-                        color: AppColors.primaryPink,
-                      ),
-                    ),
+            Row(
+              children: [
+                const Icon(Icons.sticky_note_2, color: AppColors.primaryPink),
+                const SizedBox(width: 8),
+                Text(
+                  'personal notes',
+                  style: GoogleFonts.poppins(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.primaryPink,
+                    letterSpacing: -0.5,
                   ),
                 ),
-                prefixIcon: _selectedNoteId != null
-                    ? Padding(
-                        padding: const EdgeInsets.only(left: 8.0),
-                        child: InkWell(
-                          onTap: () {
-                            setState(() {
-                              _noteController.clear();
-                              _selectedNoteId = null;
-                              _noteFocusNode.unfocus();
-                            });
-                          },
-                          borderRadius: BorderRadius.circular(24),
-                          child: Container(
-                            width: 48,
-                            height: 48,
-                            decoration: BoxDecoration(
-                              color: theme.colorScheme.onSurface.withOpacity(0.08),
-                              shape: BoxShape.circle,
-                            ),
-                            child: Icon(Icons.close_rounded, color: theme.hintColor),
-                          ),
-                        ),
-                      )
-                    : null,
-              ),
-              style: theme.textTheme.bodyLarge,
+              ],
+            ),
+            const SizedBox(height: 10),
+            Column(
+              children: [
+                TextField(
+                  controller: _noteController,
+                  focusNode: _noteFocusNode,
+                  maxLines: 3,
+                  decoration: InputDecoration(
+                    hintText: 'write a new note...',
+                    hintStyle: GoogleFonts.poppins(color: theme.hintColor),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(color: borderColor, width: 1.0),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(color: borderColor, width: 1.0),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(color: AppColors.primaryPink, width: 1.5),
+                    ),
+                    filled: true,
+                    fillColor: Colors.transparent,
+                  ),
+                  style: theme.textTheme.bodyLarge,
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    if (_selectedNoteId != null)
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded),
+                        onPressed: () {
+                          setState(() {
+                            _noteController.clear();
+                            _selectedNoteId = null;
+                            _noteFocusNode.unfocus();
+                          });
+                        },
+                        color: theme.hintColor,
+                      ),
+                    IconButton(
+                      icon: Icon(
+                        _selectedNoteId == null ? Icons.bookmark_add_outlined : Icons.bookmark_rounded,
+                        color: AppColors.primaryPink,
+                      ),
+                      onPressed: _savePersonalNote,
+                    ),
+                  ],
+                ),
+              ],
             ),
             const SizedBox(height: 15),
-            if (_personalNotes.isEmpty)
+            if (displayedNotes.isEmpty)
               Padding(
                 padding: const EdgeInsets.all(8.0),
                 child: Text(
@@ -430,9 +504,9 @@ class _MoodTrackerScreenState extends State<MoodTrackerScreen> {
               ListView.builder(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
-                itemCount: _personalNotes.length,
+                itemCount: displayedNotes.length,
                 itemBuilder: (context, index) {
-                  final note = _personalNotes[index];
+                  final note = displayedNotes[index];
                   final displayContent = note.content.length > 100
                       ? '${note.content.substring(0, 100)}...'
                       : note.content;
@@ -441,17 +515,10 @@ class _MoodTrackerScreenState extends State<MoodTrackerScreen> {
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(10.0),
                       child: Dismissible(
-                        key: ValueKey(note.id),
+                        key: ObjectKey(note),
                         direction: DismissDirection.endToStart,
                         onDismissed: (direction) {
-                          soundService.playSwipeDeleteSound();
-                          _deletePersonalNote(note.id);
-                          final snackbarContent = note.content.length > 30
-                              ? '${note.content.substring(0, 30)}...'
-                              : note.content;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('note deleted: "$snackbarContent"', style: GoogleFonts.poppins())),
-                          );
+                          _deletePersonalNoteWithUndo(note);
                         },
                         background: ClipRRect(
                           borderRadius: BorderRadius.circular(10.0),

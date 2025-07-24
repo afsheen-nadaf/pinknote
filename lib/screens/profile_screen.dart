@@ -623,13 +623,14 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                     ),
                     const SizedBox(height: 32),
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
+                      // Modified: Changed mainAxisAlignment to spaceBetween
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         TextButton(
                           onPressed: () => Navigator.of(context).pop(),
                           child: Text('cancel', style: GoogleFonts.poppins(color: AppColors.errorRed, fontWeight: FontWeight.bold)),
                         ),
-                        const SizedBox(width: 10),
+                        // Removed SizedBox here as spaceBetween handles spacing
                         ElevatedButton(
                           onPressed: () async {
                             if (_currentUser != null) {

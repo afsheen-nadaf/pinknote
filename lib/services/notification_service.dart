@@ -22,14 +22,15 @@ class NotificationService {
   Future<void> init() async {
     tz.initializeTimeZones();
     try {
-      // Attempt to set the local timezone dynamically based on the device's timezone
-      tz.setLocalLocation(tz.getLocation(tz.local.name));
-      debugPrint("Timezone set to device's local timezone: ${tz.local.name}.");
+      // Use Dart's built-in timeZoneName property. This is a "best-effort"
+      // approach that works on most modern platforms without a native dependency.
+      final String timeZoneName = DateTime.now().timeZoneName;
+      tz.setLocalLocation(tz.getLocation(timeZoneName));
+      debugPrint("Timezone successfully set via Dart: $timeZoneName");
     } catch (e) {
-      debugPrint("Could not set local timezone automatically: $e");
-      // Fallback to a default timezone if the local one isn't found
+      debugPrint("Failed to get local timezone via Dart. Error: $e. Falling back to UTC.");
+      // Fallback to UTC if the timezone name can't be found or is invalid.
       tz.setLocalLocation(tz.getLocation('Etc/UTC'));
-      debugPrint("Falling back to UTC timezone.");
     }
 
     // Load notification preference
@@ -52,12 +53,30 @@ class NotificationService {
 
     await _notificationsPlugin.initialize(
       initializationSettings,
+      // Handles notification taps when the app is in the foreground or background (but not terminated).
       onDidReceiveNotificationResponse: (NotificationResponse response) async {
-        debugPrint('Notification tapped: ${response.payload}');
+        debugPrint('Notification tapped while app is running: ${response.payload}');
         _handleNotificationTap(response.payload);
       },
+      // The top-level background handler is for running background tasks, not for navigation.
+      // We handle navigation from a terminated state using the `getNotificationAppLaunchDetails` method.
       onDidReceiveBackgroundNotificationResponse: onDidReceiveBackgroundNotificationResponse,
     );
+  }
+
+  /// This method should be called from your main app widget's initState to handle
+  /// navigation when the app is launched from a notification.
+  Future<void> handleInitialNotification() async {
+    final NotificationAppLaunchDetails? notificationAppLaunchDetails =
+        await _notificationsPlugin.getNotificationAppLaunchDetails();
+
+    if (notificationAppLaunchDetails?.didNotificationLaunchApp ?? false) {
+      final payload = notificationAppLaunchDetails!.notificationResponse?.payload;
+      debugPrint('App launched by notification tap. Payload: $payload');
+      // A small delay to ensure the UI is ready before navigating.
+      await Future.delayed(const Duration(milliseconds: 500));
+      _handleNotificationTap(payload);
+    }
   }
 
   /// Setter for the navigator key. This allows the service to navigate.
@@ -78,8 +97,6 @@ class NotificationService {
       await _notificationsPlugin.cancelAll();
       debugPrint("All notifications cancelled due to preference change.");
     }
-    // Note: Re-scheduling daily notifications when re-enabled will be handled
-    // by the calling widget (e.g., SettingsScreen or MainAppScreen) as it requires BuildContext.
   }
 
   /// Handles navigation based on the notification payload.
@@ -99,24 +116,18 @@ class NotificationService {
 
         switch (screen) {
           case 'tasks':
-            // Assuming TasksScreen is at index 1 in MainAppScreen's IndexedStack
-            // This requires a way to change the selected index of MainAppScreen
-            // A more robust solution would be to use a Navigator 2.0 or a shared state.
-            // For now, we'll just navigate to the main app screen, and the user can go to tasks.
-            // If direct deep linking is needed, MainAppScreen would need a method to change its selected index.
-            _navigatorKey!.currentState!.pushReplacementNamed('/home', arguments: {'initialIndex': 1}); // Example
+            _navigatorKey!.currentState!.pushReplacementNamed('/home', arguments: {'initialIndex': 1});
             break;
           case 'calendar':
-            _navigatorKey!.currentState!.pushReplacementNamed('/home', arguments: {'initialIndex': 2}); // Example
+            _navigatorKey!.currentState!.pushReplacementNamed('/home', arguments: {'initialIndex': 2});
             break;
           case 'pomodoro':
-            _navigatorKey!.currentState!.pushReplacementNamed('/home', arguments: {'initialIndex': 3}); // Example
+            _navigatorKey!.currentState!.pushReplacementNamed('/home', arguments: {'initialIndex': 3});
             break;
           case 'mood_tracker':
-            _navigatorKey!.currentState!.pushReplacementNamed('/home', arguments: {'initialIndex': 4}); // Example
+            _navigatorKey!.currentState!.pushReplacementNamed('/home', arguments: {'initialIndex': 4});
             break;
           default:
-            // Navigate to home screen if payload is unknown or not handled
             _navigatorKey!.currentState!.pushReplacementNamed('/home');
             break;
         }
@@ -197,12 +208,11 @@ class NotificationService {
       _dailyGoodMorningId,
       'good morning! ☀️',
       'time to get started with your day and be productive!',
-      // Schedule time for 9:00 AM in the user's local timezone
       _nextInstanceOf(9, 0),
       platformChannelSpecifics,
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
       matchDateTimeComponents: DateTimeComponents.time,
-      payload: jsonEncode({'screen': 'home'}), // Payload for redirection
+      payload: jsonEncode({'screen': 'home'}),
     );
     debugPrint("Daily good morning notification scheduled for 9:00 AM in local timezone.");
   }
@@ -230,12 +240,11 @@ class NotificationService {
       _dailyMoodReminderId,
       'how are you feeling?',
       "don't forget to track your mood today <3",
-      // Schedule time for 9:00 PM in the user's local timezone
       _nextInstanceOf(21, 0),
       platformDetails,
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
       matchDateTimeComponents: DateTimeComponents.time,
-      payload: jsonEncode({'screen': 'mood_tracker'}), // Payload for redirection
+      payload: jsonEncode({'screen': 'mood_tracker'}),
     );
     debugPrint("Daily mood reminder notification scheduled for 9:00 PM in local timezone.");
   }
@@ -246,7 +255,7 @@ class NotificationService {
     required String title,
     required String body,
     required DateTime scheduledDate,
-    required BuildContext context, // Added BuildContext
+    required BuildContext context,
     required String type, // 'task' or 'event'
   }) async {
     if (!_notificationsEnabled) {
@@ -274,12 +283,12 @@ class NotificationService {
 
     await _notificationsPlugin.zonedSchedule(
       id,
-      title.toLowerCase(), // Ensure title is lowercase
-      body.toLowerCase(), // Ensure body is lowercase
+      title.toLowerCase(),
+      body.toLowerCase(),
       tz.TZDateTime.from(scheduledDate, tz.local),
       platformDetails,
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-      payload: jsonEncode({'type': type, 'id': id.toString(), 'screen': type == 'task' ? 'tasks' : 'calendar'}), // Payload for redirection
+      payload: jsonEncode({'type': type, 'id': id.toString(), 'screen': type == 'task' ? 'tasks' : 'calendar'}),
     );
     debugPrint("Scheduled reminder for '${title.toLowerCase()}' at $scheduledDate");
   }
@@ -296,7 +305,6 @@ class NotificationService {
       debugPrint("Skipping pomodoro completion notification due to user preference.");
       return;
     }
-    // This notification is not time-sensitive, so it doesn't need exact alarm permission check here
     const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
       'pomodoro_completion_channel',
       'pomodoro complete',
@@ -307,10 +315,10 @@ class NotificationService {
     const NotificationDetails platformDetails = NotificationDetails(android: androidDetails);
     await _notificationsPlugin.show(
       DateTime.now().millisecondsSinceEpoch,
-      title.toLowerCase(), // Ensure title is lowercase
-      body.toLowerCase(), // Ensure body is lowercase
+      title.toLowerCase(),
+      body.toLowerCase(),
       platformDetails,
-      payload: jsonEncode({'screen': 'pomodoro'}), // Payload for redirection
+      payload: jsonEncode({'screen': 'pomodoro'}),
     );
   }
 
@@ -324,7 +332,6 @@ class NotificationService {
       debugPrint("Skipping running pomodoro notification due to user preference.");
       return;
     }
-    // This is a persistent notification, but still benefits from exact alarm permission for reliability
     if (!await _requestPermissions(context)) {
       debugPrint("Skipping running pomodoro notification due to permissions.");
       return;
@@ -342,10 +349,10 @@ class NotificationService {
     const NotificationDetails platformDetails = NotificationDetails(android: androidDetails);
     await _notificationsPlugin.show(
       _pomodoroRunningId,
-      title.toLowerCase(), // Ensure title is lowercase
-      body.toLowerCase(), // Ensure body is lowercase
+      title.toLowerCase(),
+      body.toLowerCase(),
       platformDetails,
-      payload: jsonEncode({'screen': 'pomodoro'}), // Payload for redirection
+      payload: jsonEncode({'screen': 'pomodoro'}),
     );
   }
 
@@ -385,12 +392,12 @@ class NotificationService {
   }
 }
 
+/// This function is required by the plugin to handle background notifications.
+/// It runs in an isolated scope and cannot access the main app's state or UI.
+/// Use this for background data processing, such as marking a message as read.
+/// Navigation upon tapping a notification is handled within the main app isolate.
 @pragma('vm:entry-point')
 void onDidReceiveBackgroundNotificationResponse(NotificationResponse notificationResponse) {
   debugPrint('background notification tapped: ${notificationResponse.payload}');
-  // This function runs in an isolated scope, so it cannot directly access
-  // the Navigator. You would typically use platform channels or
-  // a global event bus to communicate with the main Flutter isolate.
-  // For this example, we'll just log it.
-  // The main app's onDidReceiveNotificationResponse handles foreground/tapped-from-tray.
+  // For example, you could use SharedPreferences here to update a value.
 }
