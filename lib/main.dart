@@ -2,10 +2,11 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_auth/firebase_auth.dart'; // Corrected import: added .dart and semicolon
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import 'package:pinknote/screens/home_screen.dart';
 import 'package:pinknote/screens/tasks_screen.dart';
@@ -24,7 +25,6 @@ import 'package:pinknote/utils/app_constants.dart';
 import 'package:pinknote/models/category.dart';
 import 'package:pinknote/models/event.dart';
 import 'package:pinknote/theme_mode_notifier.dart';
-import 'package:permission_handler/permission_handler.dart';
 
 import 'firebase_options.dart';
 
@@ -32,9 +32,9 @@ final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Permission.notification.request();
-
-  runApp(const MyApp()); // Removed hasCompletedInitialOnboarding argument
+  // REMOVED: Do not request permissions in main(). This can cause startup issues on iOS.
+  // await Permission.notification.request();
+  runApp(const MyApp());
 }
 
 class MyApp extends StatefulWidget {
@@ -47,7 +47,7 @@ class MyApp extends StatefulWidget {
 class _MyAppState extends State<MyApp> {
   bool _isLoading = true;
   bool _hasCompletedInitialOnboarding = false;
-  late FirestoreService _firestoreService; // Changed to late
+  late FirestoreService _firestoreService;
 
   @override
   void initState() {
@@ -67,6 +67,14 @@ class _MyAppState extends State<MyApp> {
       _firestoreService = FirestoreService("pinknote_app");
       debugPrint("FirestoreService initialized");
 
+      // MOVED: Request notification permission here.
+      // It's better to ask for permission here than in main(), but ideally,
+      // this should be triggered by a user action, e.g., a button in settings.
+      // We check if the user has already denied the permission before requesting.
+      if (await Permission.notification.isDenied) {
+          await Permission.notification.request();
+      }
+
       // 2. Load SharedPreferences
       final prefs = await SharedPreferences.getInstance();
       _hasCompletedInitialOnboarding = prefs.getBool('has_completed_initial_onboarding') ?? false;
@@ -77,13 +85,15 @@ class _MyAppState extends State<MyApp> {
       debugPrint("Notification service initialized");
       notificationService.setNavigatorKey(navigatorKey);
 
-      if (notificationService.isNotificationsEnabled) {
+      // Check if notifications are enabled before scheduling
+      final status = await Permission.notification.status;
+      if (status.isGranted) {
         await notificationService.scheduleDailyGoodMorningNotification(context).timeout(const Duration(seconds: 5));
         debugPrint("Scheduled good morning notification");
         await notificationService.scheduleDailyMoodReminderNotification(context).timeout(const Duration(seconds: 5));
         debugPrint("Scheduled daily mood reminder");
       } else {
-        debugPrint("Notifications are disabled. Skipping daily notification scheduling.");
+        debugPrint("Notifications are not granted. Skipping daily notification scheduling.");
       }
 
       // 4. Load Sound Preference
@@ -271,7 +281,7 @@ class _MyAppState extends State<MyApp> {
               bottomNavigationBarTheme: const BottomNavigationBarThemeData(
                 backgroundColor: AppColors.darkGrey,
                 selectedItemColor: AppColors.primaryPink,
-                unselectedItemColor: Colors.white, // Changed to white for dark mode
+                unselectedItemColor: Colors.white,
                 elevation: 0,
               ),
               dividerColor: AppColors.darkGrey,
@@ -288,13 +298,12 @@ class _MyAppState extends State<MyApp> {
               ),
             ),
             home: _isLoading
-                ? const LoadingScreen() // Show LoadingScreen initially
+                ? const LoadingScreen()
                 : AuthFlowHandler(
                     firestoreService: _firestoreService,
                     hasCompletedInitialOnboarding: _hasCompletedInitialOnboarding,
                   ),
             routes: {
-              // Keep other routes if needed, but '/' will be handled by the home property
               '/home': (context) {
                 final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
                 final initialIndex = args?['initialIndex'] as int? ?? 0;
@@ -352,9 +361,6 @@ class _AuthFlowHandlerState extends State<AuthFlowHandler> {
       stream: FirebaseAuth.instance.authStateChanges(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          // This part will primarily be reached if there's a very short delay
-          // after the initial app loading, or if the auth state changes later.
-          // The main loading screen handles the initial app startup.
           return Scaffold(
             body: Container(
               decoration: BoxDecoration(
@@ -459,7 +465,6 @@ class _MainAppScreenState extends State<MainAppScreen> with TickerProviderStateM
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
 
-  // List of titles for each screen
   final List<String> _pageTitles = const [
     'pinknote',
     'tasks',
@@ -578,8 +583,8 @@ class _MainAppScreenState extends State<MainAppScreen> with TickerProviderStateM
         extendBody: true,
         backgroundColor: Colors.transparent,
         appBar: PreferredSize(
-          preferredSize: const Size.fromHeight(70), // Reverted height to original
-          child: AppBar( // Removed Stack and Positioned for the divider
+          preferredSize: const Size.fromHeight(70),
+          child: AppBar(
             leading: IconButton(
               icon: Icon(Icons.person_rounded, color: theme.colorScheme.onSurface),
               onPressed: () {
@@ -595,12 +600,10 @@ class _MainAppScreenState extends State<MainAppScreen> with TickerProviderStateM
               },
             ),
             title: Text(
-              // Use the page title based on selected index
               _pageTitles[_selectedIndex],
               style: GoogleFonts.poppins(
-                // Set all font sizes to 30
                 fontSize: 30,
-                fontWeight: FontWeight.w700, // Keep consistent font weight
+                fontWeight: FontWeight.w700,
                 color: AppColors.primaryPink,
                 letterSpacing: -0.5,
               ),
@@ -645,7 +648,6 @@ class _MainAppScreenState extends State<MainAppScreen> with TickerProviderStateM
           ),
         ),
         bottomNavigationBar:
-            // Removed ClipRRect and BackdropFilter for seamless look
             BottomNavigationBar(
           items: [
             _buildNavItem(Icons.home_rounded, 'home', 0),
@@ -656,11 +658,10 @@ class _MainAppScreenState extends State<MainAppScreen> with TickerProviderStateM
           ],
           currentIndex: _selectedIndex,
           onTap: _onItemTapped,
-          // MODIFIED: Set BottomNavigationBar background color to transparent, removed elevation
           backgroundColor: Colors.transparent,
           type: BottomNavigationBarType.fixed,
           selectedItemColor: AppColors.primaryPink,
-          unselectedItemColor: isDarkMode ? Colors.white : Colors.black, // Set unselected item color to white for dark mode, black for light mode
+          unselectedItemColor: isDarkMode ? Colors.white : Colors.black,
           selectedLabelStyle: theme.textTheme.labelSmall?.copyWith(
             fontWeight: FontWeight.w600,
             letterSpacing: 0.5,
@@ -668,7 +669,7 @@ class _MainAppScreenState extends State<MainAppScreen> with TickerProviderStateM
           unselectedLabelStyle: theme.textTheme.labelSmall?.copyWith(
             letterSpacing: 0.5,
           ),
-          elevation: 0, // Removed elevation
+          elevation: 0,
           selectedFontSize: 12,
           unselectedFontSize: 10,
         ),

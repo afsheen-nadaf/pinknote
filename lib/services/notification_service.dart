@@ -1,5 +1,7 @@
+import 'package:flutter/foundation.dart' show kIsWeb; // Import kIsWeb
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+// FIX: The app_settings package is not web-compatible. We will only import and use it on mobile.
 import 'package:app_settings/app_settings.dart';
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
@@ -140,7 +142,7 @@ class NotificationService {
   }
 
 
-  /// Requests necessary permissions for notifications, especially for exact alarms on Android.
+  /// Requests necessary permissions for notifications based on the platform.
   /// Returns true if permissions are granted, false otherwise.
   Future<bool> _requestPermissions(BuildContext context) async {
     if (!_notificationsEnabled) {
@@ -148,26 +150,39 @@ class NotificationService {
       return false;
     }
 
-    final AndroidFlutterLocalNotificationsPlugin? androidImplementation =
-        _notificationsPlugin.resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>();
+    // Platform-specific permission handling
+    if (kIsWeb) {
+      // On web, the browser handles permissions automatically when you first
+      // try to show a notification. There is no separate permission method to call.
+      // We return true to allow the scheduling logic to proceed.
+      return true;
+    } else {
+      // For mobile (Android), request specific permissions for exact alarms.
+      final AndroidFlutterLocalNotificationsPlugin? androidImplementation =
+          _notificationsPlugin.resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>();
 
-    bool? permissionGranted = false;
-    try {
-      permissionGranted = await androidImplementation?.requestExactAlarmsPermission();
-      if (permissionGranted == true) {
-        debugPrint("Exact alarm permission granted.");
-      } else {
-        debugPrint("Exact alarm permission NOT granted.");
-        // Show a user-friendly dialog if permission is not granted
+      bool? permissionGranted = false;
+      try {
+        // First, request the standard notification permission (required for Android 13+)
+        await androidImplementation?.requestNotificationsPermission();
+        // Then, request the exact alarm permission
+        permissionGranted = await androidImplementation?.requestExactAlarmsPermission();
+        
+        if (permissionGranted == true) {
+          debugPrint("Exact alarm permission granted.");
+        } else {
+          debugPrint("Exact alarm permission NOT granted.");
+          // Show a user-friendly dialog if permission is not granted
+          _showPermissionDialog(context);
+        }
+      } catch (e) {
+        debugPrint("Error requesting exact alarm permission: $e");
+        // If an error occurs (e.g., PlatformException), still show the dialog
         _showPermissionDialog(context);
       }
-    } catch (e) {
-      debugPrint("Error requesting exact alarm permission: $e");
-      // If an error occurs (e.g., PlatformException), still show the dialog
-      _showPermissionDialog(context);
+      return permissionGranted ?? false;
     }
-    return permissionGranted ?? false;
   }
 
   /// Helper to get the next instance of a specific time.
@@ -362,7 +377,12 @@ class NotificationService {
   }
 
   /// Displays a dialog to the user about the exact alarm permission.
+  /// This is only relevant for Android.
   void _showPermissionDialog(BuildContext context) {
+    // FIX: This dialog is mobile-only because AppSettings is not available on web.
+    if (kIsWeb) {
+      return;
+    }
     debugPrint('exact alarm permission not granted. please enable it in app settings.');
     showDialog(
       context: context,
@@ -382,6 +402,7 @@ class NotificationService {
               child: const Text('open settings'),
               onPressed: () {
                 Navigator.of(dialogContext).pop();
+                // This code will only run on mobile because of the kIsWeb check above.
                 AppSettings.openAppSettings(type: AppSettingsType.notification);
               },
             ),

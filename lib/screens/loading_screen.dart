@@ -233,7 +233,7 @@ class _LoadingScreenState extends State<LoadingScreen>
                           child: Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 40.0),
                             child: Text(
-                              'a gentle and mindful space to jot your thoughts, organize your tasks, and embrace your day with calm.',
+                              'a calm space to plan tasks, note thoughts, and embrace your day.',
                               textAlign: TextAlign.center,
                               style: GoogleFonts.poppins(
                                 fontSize: 18,

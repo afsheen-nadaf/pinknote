@@ -230,6 +230,7 @@ class _TaskFormModalState extends State<TaskFormModal> {
               child: Row(
                 children: [
                   Expanded(
+                    // FIX: Changed flex value to make date picker narrower.
                     flex: 3,
                     child: _CustomDatePicker(
                       initialDate: initialDateTime,
@@ -237,7 +238,8 @@ class _TaskFormModalState extends State<TaskFormModal> {
                     ),
                   ),
                   Expanded(
-                    flex: 2,
+                    // FIX: Kept flex value for time picker.
+                    flex: 4,
                     child: _CustomTimePicker(
                       initialTime: initialTimeOfDay,
                       onTimeChanged: (newTime) => setState(() => _dueTime = newTime),
@@ -800,22 +802,27 @@ class _CustomDatePickerState extends State<_CustomDatePicker> {
 
     return Container(
       color: isDark ? AppColors.darkSurface : AppColors.softCream,
-      child: Expanded(
-        child: _buildWheel(
-          controller: _dateController,
-          itemCount: totalDays,
-          itemBuilder: (context, index) {
-            final dateForDisplay = _startDate.add(Duration(days: index));
-            String displayDate;
-            if (dateForDisplay.year == now.year && dateForDisplay.month == now.month && dateForDisplay.day == now.day) {
-              displayDate = 'today, ${DateFormat('MMM d', 'en_US').format(dateForDisplay).toLowerCase()}';
-            } else {
-              displayDate = DateFormat('MMM d, yyyy', 'en_US').format(dateForDisplay).toLowerCase();
-            }
-            return Center(child: Text(displayDate, style: theme.textTheme.bodyLarge));
-          },
-          onSelectedItemChanged: (index) => _updateSelectedDate(index),
-        ),
+      child: _buildWheel(
+        controller: _dateController,
+        itemCount: totalDays,
+        itemBuilder: (context, index) {
+          final dateForDisplay = _startDate.add(Duration(days: index));
+          String displayDate;
+          if (dateForDisplay.year == now.year && dateForDisplay.month == now.month && dateForDisplay.day == now.day) {
+            displayDate = 'today, ${DateFormat('MMM d', 'en_US').format(dateForDisplay).toLowerCase()}';
+          } else {
+            displayDate = DateFormat('MMM d, yyyy', 'en_US').format(dateForDisplay).toLowerCase();
+          }
+          // FIX: Replaced Center with Align to left-align the text.
+          return Align(
+            alignment: Alignment.centerLeft,
+            child: Padding(
+              padding: const EdgeInsets.only(left: 16.0),
+              child: Text(displayDate, style: theme.textTheme.bodyLarge),
+            ),
+          );
+        },
+        onSelectedItemChanged: (index) => _updateSelectedDate(index),
       ),
     );
   }
@@ -876,7 +883,7 @@ class _CustomTimePickerState extends State<_CustomTimePicker> {
   Widget _buildWheel({required FixedExtentScrollController controller, required int itemCount, required IndexedWidgetBuilder itemBuilder, required ValueChanged<int> onSelectedItemChanged}) {
     return CupertinoPicker(
       scrollController: controller,
-      itemExtent: 80.0,
+      itemExtent: 40.0,
       onSelectedItemChanged: onSelectedItemChanged,
       selectionOverlay: CupertinoPickerDefaultSelectionOverlay(background: AppColors.primaryPink.withOpacity(0.1)),
       looping: true,
@@ -912,7 +919,7 @@ class _CustomTimePickerState extends State<_CustomTimePicker> {
           Expanded(
             child: CupertinoPicker.builder(
               scrollController: _amPmController,
-              itemExtent: 80.0,
+              itemExtent: 40.0,
               onSelectedItemChanged: (index) => _updateSelectedTime(),
               itemBuilder: (context, index) {
                 final String period = (index % 2 == 0) ? 'am' : 'pm';
