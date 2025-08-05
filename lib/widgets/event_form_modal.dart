@@ -1,37 +1,36 @@
-// ignore_for_file: unused_element, prefer_typing_uninitialized_variables
-
 import 'package:flutter/material.dart';
-import 'package:flutter/cupertino.dart'; // For CupertinoPicker
-import 'package:flutter/services.dart'; // For HapticFeedback
-import 'package:intl/intl.dart'; // For DateFormat
-import 'package:chrono_dart/chrono_dart.dart'; // Import chrono_dart
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
+import 'package:chrono_dart/chrono_dart.dart';
 import '../models/event.dart';
-import '../models/category.dart'; // Import Category model
+import '../models/category.dart';
 import '../services/services.dart';
 import '../utils/app_constants.dart';
-import '../widgets/category_form_modal.dart'; // Import CategoryFormModal
+import '../widgets/category_form_modal.dart';
 
 class EventFormModal extends StatefulWidget {
-  final Event? event; // Null for new, Event object for editing
-  final bool isNewEvent; // Flag to indicate if it's a new event
+  final Event? event;
+  final bool isNewEvent;
   final Function(Event) onSave;
   final Function(String)? onDelete;
-  final List<Category> availableCategories; // New: Available categories
-  final Function(Category) onAddCategory; // New: Function to add category
-  final Function(Category) onUpdateCategory; // New: Function to update category
-  final Function(String) onDeleteCategory; // New: Function to delete category
-
+  final List<Category> availableCategories;
+  final Function(Category) onAddCategory;
+  final Function(Category) onUpdateCategory;
+  final Function(String) onDeleteCategory;
+  final FirestoreService firestoreService; // ADDED: FirestoreService dependency
 
   const EventFormModal({
     super.key,
     this.event,
     required this.onSave,
     this.onDelete,
-    this.isNewEvent = false, // Default to false if not provided
-    required this.availableCategories, // New: Required
-    required this.onAddCategory, // New: Required
-    required this.onUpdateCategory, // New: Required
-    required this.onDeleteCategory, // New: Required
+    this.isNewEvent = false,
+    required this.availableCategories,
+    required this.onAddCategory,
+    required this.onUpdateCategory,
+    required this.onDeleteCategory,
+    required this.firestoreService, // ADDED: FirestoreService dependency
   });
 
   @override
@@ -46,16 +45,16 @@ class _EventFormModalState extends State<EventFormModal> {
   late DateTime? _endDate;
   late TimeOfDay? _startTime;
   late TimeOfDay? _endTime;
-  late bool _isAlarmEnabled; // New: State for alarm toggle
-  late String _selectedCategoryName; // New: Selected category name for event
+  late bool _isAlarmEnabled;
+  late bool _isImportant;
+  late String _selectedCategoryName;
   late DateTime _currentCalendarMonth;
-
-  // State for auto-detected date
   DateTime? _detectedDateTime;
   bool _keepDetectedDateTime = true;
-
-  // New state variable to handle date range selection
   DateTime? _firstDateInRange;
+
+  String? _recurrenceUnit;
+  late int _recurrenceValue;
 
   @override
   void initState() {
@@ -64,17 +63,19 @@ class _EventFormModalState extends State<EventFormModal> {
     _titleController = TextEditingController(text: event?.title ?? '');
     _descriptionController = TextEditingController(text: event?.description ?? '');
     _startDate = event?.date;
-    _endDate = event?.endDate; // Initialize end date
+    _endDate = event?.endDate;
     _startTime = event?.startTime;
     _endTime = event?.endTime;
-    _isAlarmEnabled = widget.event != null; // Default alarm to on if editing an event
-    _selectedCategoryName = event?.category ?? 'general'; // Initialize selected category
+    _isAlarmEnabled = event?.isAlarmEnabled ?? true;
+    _isImportant = event?.isImportant ?? false;
+    _selectedCategoryName = event?.category ?? 'general';
     _currentCalendarMonth = _startDate ?? DateTime.now();
+    _recurrenceUnit = event?.recurrenceUnit;
+    _recurrenceValue = event?.recurrenceValue ?? 1;
 
-    // Add listeners to parse text for dates
     _titleController.addListener(_parseTextForDateTime);
     _descriptionController.addListener(_parseTextForDateTime);
-    _parseTextForDateTime(); // Initial parse
+    _parseTextForDateTime();
   }
 
   @override
@@ -89,39 +90,33 @@ class _EventFormModalState extends State<EventFormModal> {
   void _parseTextForDateTime() {
     final text = '${_titleController.text} ${_descriptionController.text}'.trim();
     if (text.isEmpty) {
-      if (_detectedDateTime != null) {
-        setState(() => _detectedDateTime = null);
-      }
+      if (_detectedDateTime != null) setState(() => _detectedDateTime = null);
       return;
     }
-
     final detectedRaw = Chrono.parseDate(text, ref: DateTime.now());
-
     DateTime? correctedDateTime;
     if (detectedRaw != null) {
       final offset = DateTime.now().timeZoneOffset;
       correctedDateTime = detectedRaw.add(offset);
     }
-
     if (correctedDateTime != _detectedDateTime) {
       setState(() {
         _detectedDateTime = correctedDateTime;
-        if (correctedDateTime != null) {
-          _keepDetectedDateTime = true; // Auto-select new suggestions
-        }
+        if (correctedDateTime != null) _keepDetectedDateTime = true;
       });
     }
   }
 
   void _saveEvent() {
     if (_formKey.currentState!.validate()) {
-      if (widget.isNewEvent) {
-        soundService.playAddTaskSound();
+      if (widget.event != null) {
+        notificationService.cancelNotification(NotificationService.createIntIdFromString(widget.event!.id));
       }
+
+      if (widget.isNewEvent) soundService.playAddTaskSound();
       HapticFeedback.mediumImpact();
       final now = DateTime.now();
       final String eventId = widget.event?.id ?? now.millisecondsSinceEpoch.toString();
-
       final selectedCategory = widget.availableCategories.firstWhere(
         (cat) => cat.name == _selectedCategoryName,
         orElse: () => Category(id: 'general', name: 'general', colorValue: AppColors.primaryPink.value),
@@ -135,8 +130,8 @@ class _EventFormModalState extends State<EventFormModal> {
       if (_keepDetectedDateTime && _detectedDateTime != null) {
         finalStartDate = _detectedDateTime;
         finalStartTime = TimeOfDay.fromDateTime(_detectedDateTime!);
-        finalEndDate = null; // Clear end date when using suggestion
-        finalEndTime = null; // Clear end time when using suggestion
+        finalEndDate = null;
+        finalEndTime = null;
       } else {
         finalStartDate = _startDate;
         finalEndDate = _endDate;
@@ -144,6 +139,15 @@ class _EventFormModalState extends State<EventFormModal> {
         finalEndTime = _endTime;
       }
 
+      if (finalStartDate != null && finalEndDate != null && finalStartTime != null && finalEndTime != null) {
+        DateTime startDateTime = DateTime(finalStartDate.year, finalStartDate.month, finalStartDate.day, finalStartTime.hour, finalStartTime.minute);
+        DateTime endDateTime = DateTime(finalEndDate.year, finalEndDate.month, finalEndDate.day, finalEndTime.hour, finalEndTime.minute);
+        if (endDateTime.isBefore(startDateTime)) {
+          finalEndTime = finalStartTime;
+          if (finalEndDate.isBefore(finalStartDate)) finalEndDate = finalStartDate;
+        }
+      }
+      
       final savedEvent = Event(
         id: eventId,
         title: _titleController.text.trim(),
@@ -154,10 +158,13 @@ class _EventFormModalState extends State<EventFormModal> {
         endTime: finalEndTime,
         category: _selectedCategoryName,
         colorValue: selectedCategory.colorValue,
+        isAlarmEnabled: _isAlarmEnabled,
+        isImportant: _isImportant,
+        recurrenceUnit: _isAlarmEnabled ? _recurrenceUnit : null,
+        recurrenceValue: _isAlarmEnabled ? _recurrenceValue : 1,
       );
       widget.onSave(savedEvent);
 
-      // Schedule or cancel notification based on alarm toggle
       if (_isAlarmEnabled && savedEvent.startTime != null) {
         final scheduledDateTime = DateTime(
           savedEvent.date.year,
@@ -166,189 +173,20 @@ class _EventFormModalState extends State<EventFormModal> {
           savedEvent.startTime!.hour,
           savedEvent.startTime!.minute,
         );
-        notificationService.scheduleReminderNotification(
-          id: savedEvent.id.hashCode,
-          title: 'event: ${savedEvent.title}', // Ensure lowercase
-          body: savedEvent.description?.toLowerCase() ?? 'this event is starting now.', // Ensure lowercase
-          scheduledDate: scheduledDateTime,
-          context: context, // Pass BuildContext here
-          type: 'event', // Pass type for payload
-        );
-      } else {
-        notificationService.cancelNotification(savedEvent.id.hashCode);
-      }
 
+        notificationService.scheduleReminderNotification(
+          id: NotificationService.createIntIdFromString(savedEvent.id),
+          title: savedEvent.title,
+          body: savedEvent.description ?? 'it\'s happening!',
+          scheduledDate: scheduledDateTime,
+          context: context,
+          type: 'event',
+          recurrenceUnit: savedEvent.recurrenceUnit,
+          recurrenceValue: savedEvent.recurrenceValue,
+        );
+      }
       Navigator.of(context).pop();
     }
-  }
-
-  void _presentDatePicker() {
-    setState(() {
-      _keepDetectedDateTime = false;
-      if (_startDate == null) {
-        final now = DateTime.now();
-        _startDate = now;
-        _endDate = now;
-      }
-    });
-
-    // Reset the range selection process every time the picker is opened.
-    _firstDateInRange = null;
-
-    HapticFeedback.lightImpact();
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      // FIX: Disable swipe down and tap outside to dismiss
-      enableDrag: false,
-      isDismissible: false,
-      backgroundColor: Colors.transparent, // Important for custom shape
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (BuildContext context, StateSetter modalSetState) {
-            // Use a container with clipBehavior to enforce rounded corners on children
-            return Container(
-              clipBehavior: Clip.antiAlias,
-              decoration: const BoxDecoration(
-                borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Header bar
-                  Container(
-                    color: isDark ? AppColors.darkGrey : AppColors.softCream,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        CupertinoButton(
-                          child: Text('clear', style: theme.textTheme.labelMedium?.copyWith(color: theme.colorScheme.onSurface.withOpacity(0.7))),
-                          onPressed: () {
-                            setState(() {
-                              _startDate = null;
-                              _endDate = null;
-                            });
-                            Navigator.of(context).pop();
-                          },
-                        ),
-                        CupertinoButton(
-                          child: Text('done', style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.bold, color: AppColors.primaryPink)),
-                          onPressed: () => Navigator.of(context).pop(),
-                        ),
-                      ],
-                    ),
-                  ),
-                  // Calendar content
-                  Container(
-                    color: theme.colorScheme.surface,
-                    padding: const EdgeInsets.only(bottom: 20.0), // Add padding for content
-                    child: _buildDatePickerContent(modalSetState),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    ).whenComplete(() => setState(() {}));
-  }
-
-  void _presentTimePicker() {
-     setState(() {
-      _keepDetectedDateTime = false;
-      if (_startTime == null) {
-        _startTime = TimeOfDay.now();
-        _endTime = TimeOfDay.now();
-      }
-    });
-    HapticFeedback.lightImpact();
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
-    TimeOfDay initialStartTime = _startTime ?? TimeOfDay.now();
-    TimeOfDay initialEndTime = _endTime ?? _startTime ?? TimeOfDay.now();
-
-    showCupertinoModalPopup(
-      context: context,
-      builder: (_) => Container(
-        height: 300,
-        decoration: BoxDecoration(
-          color: isDark ? AppColors.darkSurface : AppColors.softCream,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), spreadRadius: 5, blurRadius: 7, offset: const Offset(0, 3))],
-        ),
-        child: Column(
-          children: [
-            Container(
-              decoration: BoxDecoration(
-                color: isDark ? AppColors.darkGrey : AppColors.softCream,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  CupertinoButton(
-                    child: Text('clear', style: theme.textTheme.labelMedium?.copyWith(color: theme.colorScheme.onSurface.withOpacity(0.7))),
-                    onPressed: () {
-                      setState(() {
-                        _startTime = null;
-                        _endTime = null;
-                      });
-                      Navigator.of(context).pop();
-                    },
-                  ),
-                  CupertinoButton(
-                    child: Text('done', style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.bold, color: AppColors.primaryPink)),
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.only(top: 8.0),
-                          child: Text("start time", style: theme.textTheme.labelLarge),
-                        ),
-                        Expanded(
-                          child: _CustomTimePicker(
-                            initialTime: initialStartTime,
-                            onTimeChanged: (newTime) => setState(() => _startTime = newTime),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Expanded(
-                    child: Column(
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.only(top: 8.0),
-                          child: Text("end time", style: theme.textTheme.labelLarge),
-                        ),
-                        Expanded(
-                          child: _CustomTimePicker(
-                            initialTime: initialEndTime,
-                            onTimeChanged: (newTime) => setState(() => _endTime = newTime),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 
   @override
@@ -384,7 +222,7 @@ class _EventFormModalState extends State<EventFormModal> {
               _buildCategorySelector(),
               const SizedBox(height: 24),
               _buildDateTimeRow(),
-              const SizedBox(height: 24),
+              const SizedBox(height: 16),
               _buildAlarmToggle(),
               const SizedBox(height: 32),
               _buildActionButtons(),
@@ -394,12 +232,161 @@ class _EventFormModalState extends State<EventFormModal> {
       ),
     );
   }
+  
+  Widget _buildActionButtons() {
+    final theme = Theme.of(context);
+    return Row(
+      children: [
+        if (widget.isNewEvent)
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('cancel', style: theme.textTheme.labelLarge?.copyWith(color: AppColors.errorRed)),
+          ),
+        if (!widget.isNewEvent)
+          TextButton(
+            onPressed: () {
+              if (widget.onDelete != null && widget.event != null) {
+                notificationService.cancelNotification(NotificationService.createIntIdFromString(widget.event!.id));
+                widget.onDelete!(widget.event!.id);
+              }
+              Navigator.pop(context);
+            },
+            child: Text('delete', style: theme.textTheme.labelLarge?.copyWith(color: AppColors.errorRed)),
+          ),
+        const Spacer(),
+        ElevatedButton(
+          onPressed: _saveEvent,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.primaryPink,
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          ),
+          child: Text(widget.isNewEvent ? 'add event' : 'save changes'),
+        ),
+      ],
+    );
+  }
 
+  void _showRecurrencePicker() {
+    soundService.playModalOpeningSound();
+    int tempValue = _recurrenceValue;
+    String tempUnit = _recurrenceUnit ?? 'day';
+    final units = ['minute', 'hour', 'day', 'month', 'year'];
+
+    final FixedExtentScrollController valueController = FixedExtentScrollController(initialItem: tempValue - 1);
+    final FixedExtentScrollController unitController = FixedExtentScrollController(initialItem: units.indexOf(tempUnit));
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        final theme = Theme.of(context);
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(28.0),
+            side: BorderSide(color: theme.colorScheme.outline.withOpacity(0.5)),
+          ),
+          backgroundColor: theme.colorScheme.surface,
+          title: Text('recurrence', style: theme.textTheme.headlineSmall?.copyWith(fontFamily: 'Quicksand')),
+          content: SizedBox(
+            height: 200,
+            width: double.maxFinite,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  flex: 2,
+                  child: Center(child: Text('every', style: theme.textTheme.bodyLarge)),
+                ),
+                Expanded(
+                  flex: 1,
+                  child: CupertinoPicker(
+                    scrollController: valueController,
+                    itemExtent: 40.0,
+                    onSelectedItemChanged: (index) {
+                      tempValue = index + 1;
+                    },
+                    looping: true,
+                    children: List<Widget>.generate(60, (index) {
+                      return Center(child: Text((index + 1).toString(), style: theme.textTheme.bodyLarge));
+                    }),
+                  ),
+                ),
+                Expanded(
+                  flex: 3,
+                  child: CupertinoPicker.builder(
+                    scrollController: unitController,
+                    itemExtent: 40.0,
+                    onSelectedItemChanged: (index) {
+                      tempUnit = units[index % units.length];
+                    },
+                    itemBuilder: (context, index) {
+                      return Center(child: Text(units[index % units.length], style: theme.textTheme.bodyLarge));
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          actions: <Widget>[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                TextButton(
+                  child: Text('cancel', style: theme.textTheme.labelLarge),
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+                TextButton(
+                  child: Text('no repeat', style: theme.textTheme.labelLarge?.copyWith(color: AppColors.errorRed)),
+                  onPressed: () {
+                    setState(() {
+                      _recurrenceUnit = null;
+                    });
+                    Navigator.of(context).pop();
+                  },
+                ),
+                TextButton(
+                  child: Text('save', style: theme.textTheme.labelLarge?.copyWith(color: AppColors.primaryPink)),
+                  onPressed: () {
+                    setState(() {
+                      _recurrenceValue = tempValue;
+                      _recurrenceUnit = tempUnit;
+                    });
+                    Navigator.of(context).pop();
+                  },
+                ),
+              ],
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // MODIFIED: This is where the logic you provided is added.
   Widget _buildHeader() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Text(widget.isNewEvent ? 'new event' : 'edit event', style: Theme.of(context).textTheme.headlineMedium),
+        IconButton(
+          icon: Icon(_isImportant ? Icons.star_rounded : Icons.star_border_rounded, color: AppColors.accentYellow, size: 30),
+          onPressed: () {
+            soundService.playMarkAsImportantSound();
+            HapticFeedback.mediumImpact();
+            setState(() {
+              _isImportant = !_isImportant;
+            });
+            // If it's an existing event, update Firestore immediately.
+            // For new events, the state is saved when the user taps 'add event'.
+            if (!widget.isNewEvent && widget.event != null) {
+              // NOTE: You will need to create a 'toggleEventImportance' method in your
+              // FirestoreService, similar to your 'toggleTaskImportance' method.
+              widget.firestoreService.toggleEventImportance(widget.event!.id, _isImportant);
+            }
+          },
+        ),
       ],
     );
   }
@@ -614,7 +601,7 @@ class _EventFormModalState extends State<EventFormModal> {
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: isDark ? AppColors.darkGrey : AppColors.softCream,
-        title: Text('manage "${category.name}"', style: theme.textTheme.titleMedium),
+        title: Text('manage "${category.name}"', style: theme.textTheme.headlineSmall?.copyWith(fontFamily: 'Quicksand')),
         actions: [
           TextButton(
             onPressed: () {
@@ -725,6 +712,243 @@ class _EventFormModalState extends State<EventFormModal> {
     );
   }
 
+  Widget _buildAlarmToggle() {
+    final theme = Theme.of(context);
+    final bool isRecurrenceEnabled = _recurrenceUnit != null;
+    String recurrenceText = 'no repeat';
+    if (isRecurrenceEnabled) {
+      recurrenceText = 'repeats every ${_recurrenceValue > 1 ? _recurrenceValue : ''} ${_recurrenceUnit ?? 'day'}${_recurrenceValue > 1 ? 's' : ''}';
+    }
+
+    return Card(
+      elevation: 0,
+      color: Colors.transparent,
+      margin: EdgeInsets.zero,
+      child: Column(
+        children: [
+          SwitchListTile(
+            title: Text(
+              'set alarm',
+              style: theme.textTheme.headlineSmall,
+            ),
+            value: _isAlarmEnabled,
+            onChanged: (bool value) {
+              setState(() {
+                _isAlarmEnabled = value;
+                if (!value) {
+                  _recurrenceUnit = null;
+                }
+              });
+            },
+            activeColor: AppColors.primaryPink,
+            inactiveThumbColor: theme.colorScheme.outline,
+            secondary: const Icon(Icons.alarm_rounded, color: AppColors.primaryPink),
+          ),
+          if (_isAlarmEnabled) ...[
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              child: Row(
+                children: [
+                  Icon(Icons.repeat_rounded, color: isRecurrenceEnabled ? AppColors.primaryPink : theme.colorScheme.onSurface.withOpacity(0.6), size: 20),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () {
+                        if (!isRecurrenceEnabled) {
+                          setState(() {
+                            _recurrenceUnit = 'day';
+                            _recurrenceValue = 1;
+                          });
+                        }
+                        _showRecurrencePicker();
+                      },
+                      child: Text(
+                        recurrenceText,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: isRecurrenceEnabled ? AppColors.primaryPink : theme.colorScheme.onSurface.withOpacity(0.6),
+                          fontWeight: FontWeight.w400,
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (isRecurrenceEnabled)
+                    IconButton(
+                      icon: const Icon(Icons.close, size: 18),
+                      color: theme.colorScheme.onSurface.withOpacity(0.6),
+                      onPressed: () {
+                        setState(() => _recurrenceUnit = null);
+                      },
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  void _presentDatePicker() {
+    setState(() {
+      _keepDetectedDateTime = false;
+      if (_startDate == null) {
+        final now = DateTime.now();
+        _startDate = now;
+        _endDate = now;
+      }
+    });
+
+    _firstDateInRange = null;
+    HapticFeedback.lightImpact();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      enableDrag: false,
+      isDismissible: false,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter modalSetState) {
+            final theme = Theme.of(context);
+            return Container(
+              clipBehavior: Clip.antiAlias,
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surface,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    decoration: BoxDecoration(
+                      border: Border(bottom: BorderSide(color: theme.colorScheme.outline.withOpacity(0.5))),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        CupertinoButton(
+                          child: Text('clear', style: theme.textTheme.labelMedium?.copyWith(color: theme.colorScheme.onSurface.withOpacity(0.7))),
+                          onPressed: () {
+                            setState(() {
+                              _startDate = null;
+                              _endDate = null;
+                            });
+                            Navigator.of(context).pop();
+                          },
+                        ),
+                        CupertinoButton(
+                          child: Text('done', style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.bold, color: AppColors.primaryPink)),
+                          onPressed: () => Navigator.of(context).pop(),
+                        ),
+                      ],
+                    ),
+                  ),
+                  _buildDatePickerContent(modalSetState),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    ).whenComplete(() => setState(() {}));
+  }
+
+  void _presentTimePicker() {
+    setState(() {
+      _keepDetectedDateTime = false;
+      if (_startTime == null) {
+        _startTime = TimeOfDay.now();
+        _endTime = TimeOfDay.now();
+      }
+    });
+    HapticFeedback.lightImpact();
+
+    TimeOfDay initialStartTime = _startTime ?? TimeOfDay.now();
+    TimeOfDay initialEndTime = _endTime ?? _startTime ?? TimeOfDay.now();
+
+    showCupertinoModalPopup(
+      context: context,
+      builder: (BuildContext context) {
+        final theme = Theme.of(context);
+        return Container(
+          height: 300,
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          ),
+          child: Column(
+            children: [
+              Container(
+                decoration: BoxDecoration(
+                  border: Border(bottom: BorderSide(color: theme.colorScheme.outline.withOpacity(0.5))),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    CupertinoButton(
+                      child: Text('clear', style: theme.textTheme.labelMedium?.copyWith(color: theme.colorScheme.onSurface.withOpacity(0.7))),
+                      onPressed: () {
+                        setState(() {
+                          _startTime = null;
+                          _endTime = null;
+                        });
+                        Navigator.of(context).pop();
+                      },
+                    ),
+                    CupertinoButton(
+                      child: Text('done', style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.bold, color: AppColors.primaryPink)),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.only(top: 8.0),
+                            child: Text("start time", style: theme.textTheme.labelLarge),
+                          ),
+                          Expanded(
+                            child: _CustomTimePicker(
+                              initialTime: initialStartTime,
+                              onTimeChanged: (newTime) => setState(() => _startTime = newTime),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      child: Column(
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.only(top: 8.0),
+                            child: Text("end time", style: theme.textTheme.labelLarge),
+                          ),
+                          Expanded(
+                            child: _CustomTimePicker(
+                              initialTime: initialEndTime,
+                              onTimeChanged: (newTime) => setState(() => _endTime = newTime),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildDatePickerContent(StateSetter modalSetState) {
     final theme = Theme.of(context);
     final firstDayOfMonth = DateTime(_currentCalendarMonth.year, _currentCalendarMonth.month, 1);
@@ -732,7 +956,7 @@ class _EventFormModalState extends State<EventFormModal> {
     final firstWeekday = firstDayOfMonth.weekday % 7;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
       child: Column(
         children: [
           Row(
@@ -797,10 +1021,12 @@ class _EventFormModalState extends State<EventFormModal> {
                   decoration: BoxDecoration(
                     color: isSelected ? AppColors.primaryPink : (isToday ? AppColors.secondaryPink.withOpacity(0.5) : Colors.transparent),
                     shape: BoxShape.circle,
-                    border: Border.all(
-                      color: theme.colorScheme.outline.withOpacity(0.5),
-                      width: 1.0,
-                    ),
+                    border: isToday && !isSelected
+                        ? Border.all(
+                            color: theme.colorScheme.outline.withOpacity(0.5),
+                            width: 1.0,
+                          )
+                        : null,
                   ),
                   child: Center(
                     child: Text(
@@ -820,16 +1046,12 @@ class _EventFormModalState extends State<EventFormModal> {
     );
   }
 
-  // FIX: Replaced date selection logic
   void _onDaySelected(DateTime day) {
-    // This logic now runs inside the modal's `StatefulBuilder`'s `setState` (modalSetState).
     if (_firstDateInRange == null) {
-      // First tap of a new selection. This resets any existing range.
       _firstDateInRange = day;
       _startDate = day;
       _endDate = day;
     } else {
-      // Second tap, completing the range.
       if (day.isBefore(_firstDateInRange!)) {
         _startDate = day;
         _endDate = _firstDateInRange;
@@ -837,97 +1059,28 @@ class _EventFormModalState extends State<EventFormModal> {
         _startDate = _firstDateInRange;
         _endDate = day;
       }
-      // Reset for the next selection cycle. A third tap will start a new range.
       _firstDateInRange = null;
     }
   }
 
-  // FIX: Replaced range check logic
   bool _isDayInRange(DateTime day) {
-    // If we are in the middle of selecting a range (only first date is tapped),
-    // only highlight that specific date.
     if (_firstDateInRange != null) {
       return DateUtils.isSameDay(day, _firstDateInRange);
     }
 
-    // If no dates are set, nothing is in range.
     if (_startDate == null || _endDate == null) {
       return false;
     }
 
-    // Normalize dates to ignore time component for accurate range checking.
     final cleanDay = DateUtils.dateOnly(day);
     final cleanStart = DateUtils.dateOnly(_startDate!);
     final cleanEnd = DateUtils.dateOnly(_endDate!);
 
-    // Check if the day is within the selected range, inclusive.
-    // This handles single-day selections as well, where cleanStart == cleanEnd.
     return (cleanDay.isAtSameMomentAs(cleanStart) || cleanDay.isAfter(cleanStart)) &&
            (cleanDay.isAtSameMomentAs(cleanEnd) || cleanDay.isBefore(cleanEnd));
   }
-
-  Widget _buildAlarmToggle() {
-    final theme = Theme.of(context);
-    return Card(
-      elevation: 0,
-      color: Colors.transparent,
-      margin: EdgeInsets.zero,
-      child: SwitchListTile(
-        title: Text(
-          'set alarm',
-          style: theme.textTheme.headlineSmall,
-        ),
-        value: _isAlarmEnabled,
-        onChanged: (bool value) {
-          setState(() {
-            _isAlarmEnabled = value;
-            debugPrint('alarm enabled: $_isAlarmEnabled');
-          });
-        },
-        activeColor: AppColors.primaryPink,
-        inactiveThumbColor: theme.colorScheme.outline,
-        secondary: const Icon(Icons.alarm_rounded, color: AppColors.primaryPink),
-      ),
-    );
-  }
-
-  Widget _buildActionButtons() {
-    final theme = Theme.of(context);
-    return Row(
-      children: [
-        if (widget.isNewEvent) // New Event
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('cancel', style: theme.textTheme.labelLarge?.copyWith(color: AppColors.errorRed)),
-          ),
-        if (!widget.isNewEvent) // Existing Event
-          TextButton(
-            onPressed: () {
-              if (widget.onDelete != null && widget.event != null) {
-                notificationService.cancelNotification(widget.event!.id.hashCode);
-                widget.onDelete!(widget.event!.id);
-              }
-              Navigator.pop(context);
-            },
-            child: Text('delete', style: theme.textTheme.labelLarge?.copyWith(color: AppColors.errorRed)),
-          ),
-        const Spacer(),
-        ElevatedButton(
-          onPressed: _saveEvent,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.primaryPink,
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          ),
-          child: Text(widget.isNewEvent ? 'add event' : 'save changes'),
-        ),
-      ],
-    );
-  }
 }
 
-// Custom Time Picker Widget (Copied from TaskFormModal)
 class _CustomTimePicker extends StatefulWidget {
   final TimeOfDay initialTime;
   final ValueChanged<TimeOfDay> onTimeChanged;
@@ -993,10 +1146,8 @@ class _CustomTimePickerState extends State<_CustomTimePicker> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
     return Container(
-      color: isDark ? AppColors.darkSurface : AppColors.softCream,
+      color: theme.colorScheme.surface,
       child: Row(
         children: [
           Expanded(

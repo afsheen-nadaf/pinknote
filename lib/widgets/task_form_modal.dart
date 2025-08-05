@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
-import 'package:chrono_dart/chrono_dart.dart'; // Import chrono_dart
+import 'package:chrono_dart/chrono_dart.dart';
 import '../models/task.dart';
 import '../models/category.dart';
 import '../services/services.dart';
@@ -43,10 +43,13 @@ class _TaskFormModalState extends State<TaskFormModal> {
   late String _selectedCategoryName;
   late List<Subtask> _subtasks;
   late bool _isImportant;
+  late bool _isAlarmEnabled;
 
-  // State for auto-detected date
   DateTime? _detectedDateTime;
   bool _keepDetectedDateTime = true;
+
+  String? _recurrenceUnit;
+  late int _recurrenceValue;
 
   @override
   void initState() {
@@ -59,11 +62,14 @@ class _TaskFormModalState extends State<TaskFormModal> {
     _selectedCategoryName = task?.category ?? 'general';
     _subtasks = task?.subtasks.map((s) => s.copyWith()).toList() ?? [];
     _isImportant = task?.isImportant ?? false;
+    _isAlarmEnabled = task?.isAlarmEnabled ?? true;
 
-    // Add listeners to parse text for dates
+    _recurrenceUnit = task?.recurrenceUnit;
+    _recurrenceValue = task?.recurrenceValue ?? 1;
+
     _titleController.addListener(_parseTextForDateTime);
     _notesController.addListener(_parseTextForDateTime);
-    _parseTextForDateTime(); // Initial parse
+    _parseTextForDateTime();
   }
 
   @override
@@ -84,15 +90,9 @@ class _TaskFormModalState extends State<TaskFormModal> {
       return;
     }
 
-    // By providing a reference date, Chrono can correctly handle relative times like "8pm".
-    // However, it seems to have an issue with timezones, resulting in a time that is
-    // offset incorrectly. For example, in IST (UTC+5:30), "10pm" might be parsed as 4:30pm.
     final detectedRaw = Chrono.parseDate(text, ref: DateTime.now());
-
     DateTime? correctedDateTime;
     if (detectedRaw != null) {
-      // This seems to be because chrono_dart creates a local DateTime and then subtracts
-      // the timezone offset again. To fix this, we add the local timezone offset back.
       final offset = DateTime.now().timeZoneOffset;
       correctedDateTime = detectedRaw.add(offset);
     }
@@ -101,7 +101,7 @@ class _TaskFormModalState extends State<TaskFormModal> {
       setState(() {
         _detectedDateTime = correctedDateTime;
         if (correctedDateTime != null) {
-          _keepDetectedDateTime = true; // Auto-select new suggestions
+          _keepDetectedDateTime = true;
         }
       });
     }
@@ -109,11 +109,16 @@ class _TaskFormModalState extends State<TaskFormModal> {
 
   void _saveTask() {
     if (_formKey.currentState!.validate()) {
+      if (widget.task != null) {
+        notificationService.cancelNotification(NotificationService.createIntIdFromString(widget.task!.id));
+      }
+
       if (widget.task == null) {
         soundService.playAddTaskSound();
       }
       HapticFeedback.mediumImpact();
       final now = DateTime.now();
+      final String taskId = widget.task?.id ?? now.millisecondsSinceEpoch.toString();
       final order = widget.task?.order ?? now.millisecondsSinceEpoch;
 
       final selectedCategory = widget.availableCategories.firstWhere(
@@ -124,7 +129,6 @@ class _TaskFormModalState extends State<TaskFormModal> {
       final DateTime? finalDueDate;
       final TimeOfDay? finalDueTime;
 
-      // Prioritize detected date if the user wants to keep it
       if (_keepDetectedDateTime && _detectedDateTime != null) {
         finalDueDate = _detectedDateTime;
         finalDueTime = TimeOfDay.fromDateTime(_detectedDateTime!);
@@ -133,7 +137,7 @@ class _TaskFormModalState extends State<TaskFormModal> {
         finalDueTime = _dueTime;
       }
 
-      final updatedTask = (widget.task ?? Task(id: now.millisecondsSinceEpoch.toString(), title: '', order: order))
+      final updatedTask = (widget.task ?? Task(id: taskId, title: '', order: order))
           .copyWith(
         title: _titleController.text.trim(),
         notes: _notesController.text.trim().isEmpty ? null : _notesController.text.trim(),
@@ -143,139 +147,38 @@ class _TaskFormModalState extends State<TaskFormModal> {
         dueTime: finalDueTime,
         subtasks: _subtasks,
         isImportant: _isImportant,
+        isAlarmEnabled: _isAlarmEnabled,
         order: order,
+        recurrenceUnit: _isAlarmEnabled ? _recurrenceUnit : null,
+        recurrenceValue: _isAlarmEnabled ? _recurrenceValue : 1,
       );
       widget.onSave(updatedTask);
 
-      // Schedule or cancel notification
-      if (finalDueDate != null && finalDueTime != null) {
+      if (_isAlarmEnabled && updatedTask.dueDate != null && updatedTask.dueTime != null) {
         final scheduledDateTime = DateTime(
-          finalDueDate.year,
-          finalDueDate.month,
-          finalDueDate.day,
-          finalDueTime.hour,
-          finalDueTime.minute,
+          updatedTask.dueDate!.year,
+          updatedTask.dueDate!.month,
+          updatedTask.dueDate!.day,
+          updatedTask.dueTime!.hour,
+          updatedTask.dueTime!.minute,
         );
+
         notificationService.scheduleReminderNotification(
-          id: updatedTask.id.hashCode,
-          title: 'task: ${updatedTask.title}',
+          id: NotificationService.createIntIdFromString(updatedTask.id),
+          title: updatedTask.title,
           body: updatedTask.notes?.toLowerCase() ?? 'your scheduled task is due now.',
           scheduledDate: scheduledDateTime,
           context: context,
           type: 'task',
+          recurrenceUnit: updatedTask.recurrenceUnit,
+          recurrenceValue: updatedTask.recurrenceValue,
         );
-      } else {
-        notificationService.cancelNotification(updatedTask.id.hashCode);
       }
-
+      
       Navigator.of(context).pop();
     }
   }
-
-  void _presentDateTimePicker() {
-    // When user manually opens picker, deselect the auto-suggestion
-    setState(() => _keepDetectedDateTime = false);
-
-    HapticFeedback.lightImpact();
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
-    if (_dueDate == null) {
-      setState(() {
-        _dueDate = DateTime.now();
-        _dueTime = TimeOfDay.now();
-      });
-    }
-
-    DateTime initialDateTime = _dueDate ?? DateTime.now();
-    TimeOfDay initialTimeOfDay = _dueTime ?? TimeOfDay.now();
-
-    showCupertinoModalPopup(
-      context: context,
-      builder: (_) => Container(
-        height: 300,
-        decoration: BoxDecoration(
-          color: isDark ? AppColors.darkSurface : AppColors.softCream,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), spreadRadius: 5, blurRadius: 7, offset: const Offset(0, 3))],
-        ),
-        child: Column(
-          children: [
-            Container(
-              decoration: BoxDecoration(
-                color: isDark ? AppColors.darkGrey : AppColors.softCream,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                   CupertinoButton(
-                    child: Text('clear', style: theme.textTheme.labelMedium?.copyWith(color: theme.colorScheme.onSurface.withOpacity(0.7))),
-                    onPressed: () {
-                      setState(() {
-                        _dueDate = null;
-                        _dueTime = null;
-                      });
-                      Navigator.of(context).pop();
-                    },
-                  ),
-                  CupertinoButton(
-                    child: Text('done', style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.bold, color: AppColors.primaryPink)),
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: Row(
-                children: [
-                  Expanded(
-                    // FIX: Changed flex value to make date picker narrower.
-                    flex: 3,
-                    child: _CustomDatePicker(
-                      initialDate: initialDateTime,
-                      onDateChanged: (newDate) => setState(() => _dueDate = newDate),
-                    ),
-                  ),
-                  Expanded(
-                    // FIX: Kept flex value for time picker.
-                    flex: 4,
-                    child: _CustomTimePicker(
-                      initialTime: initialTimeOfDay,
-                      onTimeChanged: (newTime) => setState(() => _dueTime = newTime),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
   
-  void _showSubtaskFormModal({Subtask? subtask, int? index}) {
-    soundService.playModalOpeningSound();
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => SubtaskFormModal(
-        subtask: subtask,
-        onSave: (savedSubtask) {
-          setState(() {
-            if (index != null) {
-              _subtasks[index] = savedSubtask;
-            } else {
-              soundService.playAddTaskSound();
-              _subtasks.add(savedSubtask);
-            }
-          });
-        },
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -309,6 +212,8 @@ class _TaskFormModalState extends State<TaskFormModal> {
               _buildCategorySelector(),
               const SizedBox(height: 24),
               _buildDateTimeSection(),
+              const SizedBox(height: 16),
+              _buildAlarmToggle(),
               const SizedBox(height: 24),
               _buildSubtasksSection(),
               const SizedBox(height: 32),
@@ -317,6 +222,311 @@ class _TaskFormModalState extends State<TaskFormModal> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildAlarmToggle() {
+    final theme = Theme.of(context);
+    final bool isRecurrenceEnabled = _recurrenceUnit != null;
+    String recurrenceText = 'no repeat';
+    if (isRecurrenceEnabled) {
+      recurrenceText = 'repeats every ${_recurrenceValue > 1 ? _recurrenceValue : ''} ${_recurrenceUnit ?? 'day'}${_recurrenceValue > 1 ? 's' : ''}';
+    }
+
+    return Card(
+      elevation: 0,
+      color: Colors.transparent,
+      margin: EdgeInsets.zero,
+      child: Column(
+        children: [
+          SwitchListTile(
+            title: Text(
+              'set alarm',
+              style: theme.textTheme.headlineSmall,
+            ),
+            value: _isAlarmEnabled,
+            onChanged: (bool value) {
+              setState(() {
+                _isAlarmEnabled = value;
+                if (!value) {
+                  _recurrenceUnit = null;
+                }
+              });
+            },
+            activeColor: AppColors.primaryPink,
+            inactiveThumbColor: theme.colorScheme.outline,
+            secondary: const Icon(Icons.alarm_rounded, color: AppColors.primaryPink),
+          ),
+          if (_isAlarmEnabled) ...[
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              child: Row(
+                children: [
+                  Icon(Icons.repeat_rounded, color: isRecurrenceEnabled ? AppColors.primaryPink : theme.colorScheme.onSurface.withOpacity(0.6), size: 20),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () {
+                        if (!isRecurrenceEnabled) {
+                          setState(() {
+                            _recurrenceUnit = 'day';
+                            _recurrenceValue = 1;
+                          });
+                        }
+                        _showRecurrencePicker();
+                      },
+                      child: Text(
+                        recurrenceText,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: isRecurrenceEnabled ? AppColors.primaryPink : theme.colorScheme.onSurface.withOpacity(0.6),
+                          fontWeight: FontWeight.w400,
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (isRecurrenceEnabled)
+                    IconButton(
+                      icon: const Icon(Icons.close, size: 18),
+                      color: theme.colorScheme.onSurface.withOpacity(0.6),
+                      onPressed: () {
+                        setState(() => _recurrenceUnit = null);
+                      },
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionButtons() {
+    final theme = Theme.of(context);
+    return Row(
+      children: [
+        if (widget.task == null)
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('cancel', style: theme.textTheme.labelLarge?.copyWith(color: AppColors.errorRed)),
+          ),
+        if (widget.task != null)
+          TextButton(
+            onPressed: () {
+              notificationService.cancelNotification(NotificationService.createIntIdFromString(widget.task!.id));
+              widget.onDeleteTask?.call();
+              Navigator.pop(context);
+            },
+            child: Text('delete', style: theme.textTheme.labelLarge?.copyWith(color: AppColors.errorRed)),
+          ),
+        const Spacer(),
+        ElevatedButton(
+          onPressed: _saveTask,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.primaryPink,
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          ),
+          child: Text(widget.task == null ? 'add task' : 'save changes'),
+        ),
+      ],
+    );
+  }
+
+  void _presentDateTimePicker() {
+    setState(() => _keepDetectedDateTime = false);
+    HapticFeedback.lightImpact();
+
+    if (_dueDate == null) {
+      setState(() {
+        _dueDate = DateTime.now();
+        _dueTime = TimeOfDay.now();
+      });
+    }
+
+    DateTime initialDateTime = _dueDate ?? DateTime.now();
+    TimeOfDay initialTimeOfDay = _dueTime ?? TimeOfDay.now();
+
+    showCupertinoModalPopup(
+      context: context,
+      builder: (BuildContext context) {
+        final theme = Theme.of(context);
+        return Container(
+          height: 300,
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          ),
+          child: Column(
+            children: [
+              Container(
+                decoration: BoxDecoration(
+                  border: Border(bottom: BorderSide(color: theme.colorScheme.outline.withOpacity(0.5))),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                     CupertinoButton(
+                      child: Text('clear', style: theme.textTheme.labelMedium?.copyWith(color: theme.colorScheme.onSurface.withOpacity(0.7))),
+                      onPressed: () {
+                        setState(() {
+                          _dueDate = null;
+                          _dueTime = null;
+                        });
+                        Navigator.of(context).pop();
+                      },
+                    ),
+                    CupertinoButton(
+                      child: Text('done', style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.bold, color: AppColors.primaryPink)),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: Row(
+                  children: [
+                    Expanded(
+                      flex: 3,
+                      child: _CustomDatePicker(
+                        initialDate: initialDateTime,
+                        onDateChanged: (newDate) => setState(() => _dueDate = newDate),
+                      ),
+                    ),
+                    Expanded(
+                      flex: 4,
+                      child: _CustomTimePicker(
+                        initialTime: initialTimeOfDay,
+                        onTimeChanged: (newTime) => setState(() => _dueTime = newTime),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+  
+  void _showSubtaskFormModal({Subtask? subtask, int? index}) {
+    soundService.playModalOpeningSound();
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => SubtaskFormModal(
+        subtask: subtask,
+        onSave: (savedSubtask) {
+          setState(() {
+            if (index != null) {
+              _subtasks[index] = savedSubtask;
+            } else {
+              soundService.playAddTaskSound();
+              _subtasks.add(savedSubtask);
+            }
+          });
+        },
+      ),
+    );
+  }
+
+  void _showRecurrencePicker() {
+    soundService.playModalOpeningSound();
+    int tempValue = _recurrenceValue;
+    String tempUnit = _recurrenceUnit ?? 'day';
+    final units = ['minute', 'hour', 'day', 'month', 'year'];
+
+    final FixedExtentScrollController valueController = FixedExtentScrollController(initialItem: tempValue - 1);
+    final FixedExtentScrollController unitController = FixedExtentScrollController(initialItem: units.indexOf(tempUnit));
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        final theme = Theme.of(context);
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(28.0),
+            side: BorderSide(color: theme.colorScheme.outline.withOpacity(0.5)),
+          ),
+          backgroundColor: theme.colorScheme.surface,
+          title: Text('recurrence', style: theme.textTheme.headlineSmall?.copyWith(fontFamily: 'Quicksand')),
+          content: SizedBox(
+            height: 200,
+            width: double.maxFinite,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  flex: 2,
+                  child: Center(child: Text('every', style: theme.textTheme.bodyLarge)),
+                ),
+                Expanded(
+                  flex: 1,
+                  child: CupertinoPicker(
+                    scrollController: valueController,
+                    itemExtent: 40.0,
+                    onSelectedItemChanged: (index) {
+                      tempValue = index + 1;
+                    },
+                    looping: true,
+                    children: List<Widget>.generate(60, (index) {
+                      return Center(child: Text((index + 1).toString(), style: theme.textTheme.bodyLarge));
+                    }),
+                  ),
+                ),
+                Expanded(
+                  flex: 3,
+                  child: CupertinoPicker.builder(
+                    scrollController: unitController,
+                    itemExtent: 40.0,
+                    onSelectedItemChanged: (index) {
+                      tempUnit = units[index % units.length];
+                    },
+                    itemBuilder: (context, index) {
+                      return Center(child: Text(units[index % units.length], style: theme.textTheme.bodyLarge));
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          actions: <Widget>[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                TextButton(
+                  child: Text('cancel', style: theme.textTheme.labelLarge),
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+                TextButton(
+                  child: Text('no repeat', style: theme.textTheme.labelLarge?.copyWith(color: AppColors.errorRed)),
+                  onPressed: () {
+                    setState(() {
+                      _recurrenceUnit = null;
+                    });
+                    Navigator.of(context).pop();
+                  },
+                ),
+                TextButton(
+                  child: Text('save', style: theme.textTheme.labelLarge?.copyWith(color: AppColors.primaryPink)),
+                  onPressed: () {
+                    setState(() {
+                      _recurrenceValue = tempValue;
+                      _recurrenceUnit = tempUnit;
+                    });
+                    Navigator.of(context).pop();
+                  },
+                ),
+              ],
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -517,13 +727,12 @@ class _TaskFormModalState extends State<TaskFormModal> {
 
   void _showCategoryManagementOptions(Category category) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark; // Determine if dark mode is active
+    final isDark = theme.brightness == Brightness.dark;
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        // Set the background color here
         backgroundColor: isDark ? AppColors.darkSurface : AppColors.softCream,
-        title: Text('manage "${category.name}"', style: theme.textTheme.titleMedium),
+        title: Text('manage "${category.name}"', style: theme.textTheme.headlineSmall?.copyWith(fontFamily: 'Quicksand')),
         actions: [
           TextButton(
             onPressed: () {
@@ -562,11 +771,10 @@ class _TaskFormModalState extends State<TaskFormModal> {
   
   void _confirmDeleteCategory(Category category) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark; // Determine if dark mode is active
+    final isDark = theme.brightness == Brightness.dark;
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        // Set the background color here as well for consistency
         backgroundColor: isDark ? AppColors.darkSurface : AppColors.softCream,
         title: Text('delete category?', style: theme.textTheme.titleMedium),
         content: Text('tasks in "${category.name}" will be moved to "general".', style: theme.textTheme.bodyMedium),
@@ -704,43 +912,8 @@ class _TaskFormModalState extends State<TaskFormModal> {
       ],
     );
   }
-
-  Widget _buildActionButtons() {
-    final theme = Theme.of(context);
-    return Row(
-      children: [
-        if (widget.task == null)
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('cancel', style: theme.textTheme.labelLarge?.copyWith(color: AppColors.errorRed)),
-          ),
-        if (widget.task != null)
-          TextButton(
-            onPressed: () {
-              notificationService.cancelNotification(widget.task!.id.hashCode);
-              widget.onDeleteTask?.call();
-              Navigator.pop(context);
-            },
-            child: Text('delete', style: theme.textTheme.labelLarge?.copyWith(color: AppColors.errorRed)),
-          ),
-        const Spacer(),
-        ElevatedButton(
-          onPressed: _saveTask,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.primaryPink,
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          ),
-          child: Text(widget.task == null ? 'add task' : 'save changes'),
-        ),
-      ],
-    );
-  }
 }
 
-
-// Custom Date Picker Widget
 class _CustomDatePicker extends StatefulWidget {
   final DateTime initialDate;
   final ValueChanged<DateTime> onDateChanged;
@@ -797,11 +970,10 @@ class _CustomDatePickerState extends State<_CustomDatePicker> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final now = DateTime.now();
-    final isDark = theme.brightness == Brightness.dark;
     final int totalDays = _endDate.difference(_startDate).inDays + 1;
 
     return Container(
-      color: isDark ? AppColors.darkSurface : AppColors.softCream,
+      color: theme.colorScheme.surface,
       child: _buildWheel(
         controller: _dateController,
         itemCount: totalDays,
@@ -813,7 +985,6 @@ class _CustomDatePickerState extends State<_CustomDatePicker> {
           } else {
             displayDate = DateFormat('MMM d, yyyy', 'en_US').format(dateForDisplay).toLowerCase();
           }
-          // FIX: Replaced Center with Align to left-align the text.
           return Align(
             alignment: Alignment.centerLeft,
             child: Padding(
@@ -828,7 +999,6 @@ class _CustomDatePickerState extends State<_CustomDatePicker> {
   }
 }
 
-// Custom Time Picker Widget
 class _CustomTimePicker extends StatefulWidget {
   final TimeOfDay initialTime;
   final ValueChanged<TimeOfDay> onTimeChanged;
@@ -894,10 +1064,8 @@ class _CustomTimePickerState extends State<_CustomTimePicker> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
     return Container(
-      color: isDark ? AppColors.darkSurface : AppColors.softCream,
+      color: theme.colorScheme.surface,
       child: Row(
         children: [
           Expanded(

@@ -2,7 +2,7 @@ name: pinknote
 description: A pastel to-do list Flutter app
 publish_to: "none"
 
-version: 1.0.7+7
+version: 1.0.8+8
 
 environment:
   # FIXED: Updated to a recent stable SDK constraint
@@ -11,6 +11,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  #flutter_native_timezone:
+    #path: plugins/flutter_native_timezone
 
   # FIXED: Updated Firebase and other packages to stable, recent versions
   firebase_core: ^2.32.0
@@ -40,9 +42,8 @@ dependencies:
   csv: ^6.0.0
   uuid: ^4.5.1
   chrono_dart: ^2.0.2
-  #flutter_timezone: ^1.0.8
   #flutter_native_timezone: ^2.0.0
-
+  flutter_timezone: ^4.1.1
 
 dev_dependencies:
   flutter_test:

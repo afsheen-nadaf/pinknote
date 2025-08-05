@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:flutter/services.dart';
 import '../models/event.dart';
 import '../models/category.dart';
+import '../services/services.dart';
 import '../utils/app_constants.dart';
 import 'event_form_modal.dart';
 
@@ -17,6 +18,7 @@ class DayEventsModal extends StatefulWidget {
   final Function(Category) onAddCategory;
   final Function(Category) onUpdateCategory;
   final Function(String) onDeleteCategory;
+  final FirestoreService firestoreService; // ADDED: FirestoreService dependency
 
   const DayEventsModal({
     super.key,
@@ -29,6 +31,7 @@ class DayEventsModal extends StatefulWidget {
     required this.onAddCategory,
     required this.onUpdateCategory,
     required this.onDeleteCategory,
+    required this.firestoreService, // ADDED: FirestoreService dependency
   });
 
   @override
@@ -57,6 +60,7 @@ class _DayEventsModalState extends State<DayEventsModal> {
           onAddCategory: widget.onAddCategory,
           onUpdateCategory: widget.onUpdateCategory,
           onDeleteCategory: widget.onDeleteCategory,
+          firestoreService: widget.firestoreService, // FIX: Pass the service here
         );
       },
     );

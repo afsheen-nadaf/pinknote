@@ -1,4 +1,7 @@
 pluginManagement {
+    plugins {
+        id("org.jetbrains.kotlin.jvm") version "2.1.0"
+    }
     val flutterSdkPath = run {
         val properties = java.util.Properties()
         file("local.properties").inputStream().use { properties.load(it) }
@@ -16,16 +19,12 @@ pluginManagement {
     }
 }
 
-// ✅ ADD THIS BELOW pluginManagement
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.PREFER_PROJECT)
     repositories {
         google()
         mavenCentral()
     }
-
-    // Optional: force override dependencies or namespace settings
-    // (doesn't fix namespace issue directly, but useful if needed)
 }
 
 plugins {
@@ -36,3 +35,8 @@ plugins {
 }
 
 include(":app")
+gradle.beforeProject {
+    if (project.name == ".gradle" || project.projectDir.name == ".gradle") {
+        throw GradleException("'.gradle' directory is not a valid module and must be ignored.")
+    }
+}

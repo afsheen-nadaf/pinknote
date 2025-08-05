@@ -8,7 +8,21 @@ plugins {
 android {
     namespace = "com.afsheen.pinknote"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = "27.0.12077973"
+    ndkVersion = "27.0.12077973" // From your file
+
+    // This is the modern and preferred way to set the Java version for the app module.
+    kotlin {
+        jvmToolchain(17)
+    }
+
+    // ✅ REDUNDANT BUT FORCEFUL FIX:
+    // We are adding this block in addition to the jvmToolchain setting above.
+    // Sometimes, a misconfigured plugin (like the one causing the error)
+    // will ignore the jvmToolchain but respect this older, more explicit setting.
+    // This should finally force all Kotlin compilation in this module to use Java 17.
+    kotlinOptions {
+        jvmTarget = "17"
+    }
 
     signingConfigs {
         create("release") {
@@ -39,14 +53,9 @@ android {
         }
     }
 
+    // This is required by flutter_local_notifications and other plugins.
     compileOptions {
         isCoreLibraryDesugaringEnabled = true
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
-    }
-
-    kotlinOptions {
-        jvmTarget = "17"
     }
 }
 
@@ -54,16 +63,14 @@ flutter {
     source = "../.."
 }
 
-// ✅ This must be outside the android block
-kotlin {
-    jvmToolchain(17)
-}
-
 dependencies {
+    // ✅ UPDATED the desugar_jdk_libs version as required by the build error.
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+
+    // The Kotlin standard library.
     implementation("org.jetbrains.kotlin:kotlin-stdlib:2.1.0")
 
-    // 🔽 Add these:
+    // Your other dependencies
     implementation("com.google.android.gms:play-services-auth:21.0.0")
     implementation("com.google.firebase:firebase-auth:22.3.1")
 }

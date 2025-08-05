@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/material.dart'; // Import for Color
+import 'package:flutter/material.dart';
+import 'package:uuid/uuid.dart';
 
 class Event {
   final String id;
@@ -9,8 +10,12 @@ class Event {
   DateTime? endDate; // Optional end date for a range
   TimeOfDay? startTime;
   TimeOfDay? endTime;
-  String category; // New: Category for the event
-  int colorValue; // New: Color for the event, stored as an integer
+  String category;
+  int colorValue;
+  final bool isAlarmEnabled;
+  final bool isImportant;
+  final String? recurrenceUnit;
+  final int? recurrenceValue;
 
   Event({
     required this.id,
@@ -20,8 +25,12 @@ class Event {
     this.endDate,
     this.startTime,
     this.endTime,
-    this.category = 'general', // Default category
+    this.category = 'general',
     this.colorValue = 0xFFF48FB1, // Default to primaryPink from AppColors
+    this.isAlarmEnabled = true,
+    this.isImportant = false,
+    this.recurrenceUnit,
+    this.recurrenceValue,
   });
 
   factory Event.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
@@ -44,8 +53,12 @@ class Event {
               minute: (data['endTime'] as Map)['minute'],
             )
           : null,
-      category: data['category'] as String? ?? 'general', // Retrieve category
-      colorValue: data['colorValue'] as int? ?? 0xFFF48FB1, // Retrieve color
+      category: data['category'] as String? ?? 'general',
+      colorValue: data['colorValue'] as int? ?? 0xFFF48FB1,
+      isAlarmEnabled: data['isAlarmEnabled'] as bool? ?? true,
+      isImportant: data['isImportant'] as bool? ?? false, // FIX: Added isImportant
+      recurrenceUnit: data['recurrenceUnit'] as String?,
+      recurrenceValue: data['recurrenceValue'] as int?,
     );
   }
 
@@ -53,19 +66,72 @@ class Event {
     return {
       'title': title,
       'description': description,
-      'date': Timestamp.fromDate(date), // This is the start date
-      'endDate': endDate != null ? Timestamp.fromDate(endDate!) : null, // Save endDate
+      'date': Timestamp.fromDate(date),
+      'endDate': endDate != null ? Timestamp.fromDate(endDate!) : null,
       'startTime': startTime != null
           ? {'hour': startTime!.hour, 'minute': startTime!.minute}
           : null,
       'endTime': endTime != null
           ? {'hour': endTime!.hour, 'minute': endTime!.minute}
           : null,
-      'category': category, // Save category
-      'colorValue': colorValue, // Save color
+      'category': category,
+      'colorValue': colorValue,
+      'isAlarmEnabled': isAlarmEnabled,
+      'isImportant': isImportant, // FIX: Added isImportant
+      'recurrenceUnit': recurrenceUnit,
+      'recurrenceValue': recurrenceValue,
     };
   }
 
+  // NEW: Creates an Event instance from a JSON map (for import).
+  factory Event.fromJson(Map<String, dynamic> json) {
+    return Event(
+      id: json['id'] ?? const Uuid().v4(),
+      title: json['title'] ?? '',
+      description: json['description'],
+      date: DateTime.parse(json['date']),
+      endDate: json['endDate'] != null ? DateTime.tryParse(json['endDate']) : null,
+      startTime: json['startTime'] != null
+          ? TimeOfDay(
+              hour: int.parse(json['startTime'].split(':')[0]),
+              minute: int.parse(json['startTime'].split(':')[1]),
+            )
+          : null,
+      endTime: json['endTime'] != null
+          ? TimeOfDay(
+              hour: int.parse(json['endTime'].split(':')[0]),
+              minute: int.parse(json['endTime'].split(':')[1]),
+            )
+          : null,
+      category: json['category'] ?? 'general',
+      colorValue: json['colorValue'] as int? ?? 0xFFF48FB1,
+      isAlarmEnabled: json['isAlarmEnabled'] as bool? ?? true,
+      isImportant: json['isImportant'] as bool? ?? false, // FIX: Added isImportant
+      recurrenceUnit: json['recurrenceUnit'] as String?,
+      recurrenceValue: json['recurrenceValue'] as int?,
+    );
+  }
+
+  // NEW: Converts the Event instance to a JSON map (for export).
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'title': title,
+      'description': description,
+      'date': date.toIso8601String(),
+      'endDate': endDate?.toIso8601String(),
+      'startTime': startTime != null ? '${startTime!.hour}:${startTime!.minute}' : null,
+      'endTime': endTime != null ? '${endTime!.hour}:${endTime!.minute}' : null,
+      'category': category,
+      'colorValue': colorValue,
+      'isAlarmEnabled': isAlarmEnabled,
+      'isImportant': isImportant, // FIX: Added isImportant
+      'recurrenceUnit': recurrenceUnit,
+      'recurrenceValue': recurrenceValue,
+    };
+  }
+
+  // FIX: Added all missing fields to ensure they are copied correctly.
   Event copyWith({
     String? id,
     String? title,
@@ -76,6 +142,10 @@ class Event {
     TimeOfDay? endTime,
     String? category,
     int? colorValue,
+    bool? isAlarmEnabled,
+    bool? isImportant,
+    String? recurrenceUnit,
+    int? recurrenceValue,
   }) {
     return Event(
       id: id ?? this.id,
@@ -87,6 +157,10 @@ class Event {
       endTime: endTime ?? this.endTime,
       category: category ?? this.category,
       colorValue: colorValue ?? this.colorValue,
+      isAlarmEnabled: isAlarmEnabled ?? this.isAlarmEnabled,
+      isImportant: isImportant ?? this.isImportant,
+      recurrenceUnit: recurrenceUnit ?? this.recurrenceUnit,
+      recurrenceValue: recurrenceValue ?? this.recurrenceValue,
     );
   }
 

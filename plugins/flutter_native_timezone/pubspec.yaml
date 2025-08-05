@@ -1,0 +1,18 @@
+name: flutter_native_timezone
+description: A temporary local version of the flutter_native_timezone plugin
+version: 2.0.0
+homepage: https://github.com/whelksoft/flutter_native_timezone
+environment:
+  sdk: ">=2.17.0 <4.0.0"
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: com.causalidea.flutter_native_timezone
+        pluginClass: FlutterNativeTimezonePlugin
+      ios:
+        pluginClass: FlutterNativeTimezonePlugin
+dependencies:
+  flutter:
+    sdk: flutter

@@ -4,13 +4,14 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'dart:math';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:firebase_auth/firebase_auth.dart'; 
-import 'dart:async'; 
+import 'package:firebase_auth/firebase_auth.dart';
+import 'dart:async';
 
 import '../utils/app_constants.dart';
-import '../services/firestore_service.dart'; 
-import '../services/weather_service.dart'; 
-import 'package:geolocator/geolocator.dart'; 
+import '../services/firestore_service.dart';
+import '../services/weather_service.dart';
+import 'package:geolocator/geolocator.dart';
+import '../widgets/daily_routines_modal.dart';
 
 class FloatingElement {
   double x;
@@ -58,7 +59,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   Timer? _timeTimer;
 
   final List<FloatingElement> _floatingElements = [];
-  
+
   final List<String> _quotes = [
     "your small steps matter.",
     "one gentle task at a time.",
@@ -98,6 +99,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   late AnimationController _weatherAnimationController;
   late Animation<double> _rainDropAnimation;
   late Animation<double> _sparkleAnimation;
+  late AnimationController _routinesWidgetController;
+  late Animation<double> _routinesWidgetFadeAnimation;
+  late Animation<Offset> _routinesWidgetSlideAnimation;
+
 
   Future<void> _fetchRealWeather() async {
     bool serviceEnabled;
@@ -286,6 +291,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     _clockController = AnimationController(vsync: this, duration: const Duration(seconds: 2))..repeat(reverse: true);
     _clockPulseAnimation = Tween<double>(begin: 0.98, end: 1.02).animate(CurvedAnimation(parent: _clockController, curve: Curves.easeInOut));
     _weatherAnimationController = AnimationController(vsync: this, duration: const Duration(seconds: 2));
+    _routinesWidgetController = AnimationController(vsync: this, duration: const Duration(milliseconds: 1000));
+    _routinesWidgetFadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(CurvedAnimation(parent: _routinesWidgetController, curve: Curves.easeIn));
+    _routinesWidgetSlideAnimation = Tween<Offset>(begin: const Offset(0, 0.2), end: Offset.zero).animate(CurvedAnimation(parent: _routinesWidgetController, curve: Curves.easeOutCubic));
+
 
     _setRandomQuote();
     _setCurrentDate();
@@ -307,6 +316,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     Future.delayed(const Duration(milliseconds: 700), () { if (mounted) _dateController.forward(); });
     Future.delayed(const Duration(milliseconds: 900), () { if (mounted) _quoteController.forward(); });
     Future.delayed(const Duration(milliseconds: 1100), () { if (mounted) _weatherTextController.forward(); });
+    Future.delayed(const Duration(milliseconds: 800), () { if (mounted) _routinesWidgetController.forward(); });
 
     _fetchRealWeather();
   }
@@ -341,6 +351,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     _backgroundGradientController.dispose();
     _clockController.dispose();
     _weatherAnimationController.dispose();
+    _routinesWidgetController.dispose();
     super.dispose();
   }
 
@@ -585,6 +596,45 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
+  Widget _buildDailyRoutinesWidget(ThemeData theme) {
+    return FadeTransition(
+      opacity: _routinesWidgetFadeAnimation,
+      child: SlideTransition(
+        position: _routinesWidgetSlideAnimation,
+        child: GestureDetector(
+          onTap: () {
+            showDialog(
+              context: context,
+              builder: (context) => DailyRoutinesModal(firestoreService: widget.firestoreService),
+            );
+          },
+          child: Container(
+            margin: const EdgeInsets.only(top: 16),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: theme.cardColor.withOpacity(0.8),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: theme.colorScheme.primary.withOpacity(0.2), width: 1),
+              boxShadow: [BoxShadow(color: AppColors.shadowSoft.withOpacity(0.15), blurRadius: 8, offset: const Offset(0, 4))],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.watch_later_outlined, color: AppColors.primaryPink, size: 32),
+                const SizedBox(height: 8),
+                Text(
+                  "routines",
+                  style: GoogleFonts.quicksand(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+
   @override
   Widget build(BuildContext context) {
     final screenHeight = MediaQuery.of(context).size.height;
@@ -593,6 +643,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     final theme = Theme.of(context);
 
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       backgroundColor: Colors.transparent,
       body: Stack(
         children: [
@@ -603,130 +654,146 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               child: SlideTransition(
                 position: _mainContentSlideAnimation,
                 child: Padding(
-                  padding: EdgeInsets.symmetric(horizontal: screenWidth * 0.06, vertical: screenHeight * 0.02),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  padding: EdgeInsets.symmetric(horizontal: screenWidth * 0.06),
+                  child: Stack(
                     children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _buildDateTimeWidget(),
-                          ScaleTransition(
-                            scale: _weatherContainerScaleAnimation,
-                            child: Container(
-                              padding: const EdgeInsets.all(20),
-                              decoration: BoxDecoration(
-                                color: theme.cardColor.withOpacity(0.6),
-                                borderRadius: BorderRadius.circular(25),
-                                border: Border.all(color: theme.colorScheme.primary.withOpacity(0.1), width: 1),
-                                boxShadow: [BoxShadow(color: AppColors.shadowSoft.withOpacity(0.15), blurRadius: 15, offset: const Offset(0, 8))],
-                              ),
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
+                      Align(
+                        alignment: Alignment.topCenter,
+                        child: Padding(
+                          padding: EdgeInsets.only(top: screenHeight * 0.02),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  _buildAnimatedWeatherIcon(),
-                                  const SizedBox(height: 16),
-                                  FadeTransition(
-                                    opacity: _weatherTextFadeAnimation,
-                                    child: SlideTransition(
-                                      position: _weatherTextSlideAnimation,
-                                      child: Text(
-                                        '$_temperature\n$_weatherCondition',
-                                        style: theme.textTheme.bodyMedium?.copyWith(
-                                          fontWeight: FontWeight.w600,
-                                          letterSpacing: 0.2,
+                                  _buildDateTimeWidget(),
+                                  _buildDailyRoutinesWidget(theme),
+                                ],
+                              ),
+                              ScaleTransition(
+                                scale: _weatherContainerScaleAnimation,
+                                child: Container(
+                                  padding: const EdgeInsets.all(20),
+                                  decoration: BoxDecoration(
+                                    color: theme.cardColor.withOpacity(0.6),
+                                    borderRadius: BorderRadius.circular(25),
+                                    border: Border.all(color: theme.colorScheme.primary.withOpacity(0.1), width: 1),
+                                    boxShadow: [BoxShadow(color: AppColors.shadowSoft.withOpacity(0.15), blurRadius: 15, offset: const Offset(0, 8))],
+                                  ),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      _buildAnimatedWeatherIcon(),
+                                      const SizedBox(height: 16),
+                                      FadeTransition(
+                                        opacity: _weatherTextFadeAnimation,
+                                        child: SlideTransition(
+                                          position: _weatherTextSlideAnimation,
+                                          child: Text(
+                                            '$_temperature\n$_weatherCondition',
+                                            style: theme.textTheme.bodyMedium?.copyWith(
+                                              fontWeight: FontWeight.w600,
+                                              letterSpacing: 0.2,
+                                            ),
+                                            textAlign: TextAlign.center,
+                                          ),
                                         ),
-                                        textAlign: TextAlign.center,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      Align(
+                        alignment: Alignment.bottomLeft,
+                        child: Padding(
+                          padding: EdgeInsets.only(bottom: screenHeight * 0.04),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              FadeTransition(
+                                opacity: _greetingFadeAnimation,
+                                child: SlideTransition(
+                                  position: _greetingSlideAnimation,
+                                  child: Container(
+                                    margin: const EdgeInsets.only(bottom: 2),
+                                    child: Text(_greeting, style: GoogleFonts.poppins(fontSize: 34, fontWeight: FontWeight.w700, color: AppColors.primaryPink, letterSpacing: -0.5, height: 1.2)),
+                                  ),
+                                ),
+                              ),
+                              FadeTransition(
+                                opacity: _sublineFadeAnimation,
+                                child: SlideTransition(
+                                  position: _sublineSlideAnimation,
+                                  child: Container(
+                                    margin: const EdgeInsets.only(bottom: 12),
+                                    child: RichText(
+                                      text: TextSpan(
+                                        style: theme.textTheme.bodyLarge?.copyWith(
+                                          fontFamily: 'Quicksand',
+                                          fontWeight: FontWeight.w500,
+                                          letterSpacing: 0.3,
+                                        ),
+                                        children: _sublineSpans,
                                       ),
                                     ),
                                   ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const Spacer(),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          FadeTransition(
-                            opacity: _greetingFadeAnimation,
-                            child: SlideTransition(
-                              position: _greetingSlideAnimation,
-                              child: Container(
-                                margin: const EdgeInsets.only(bottom: 8),
-                                child: Text(_greeting, style: GoogleFonts.poppins(fontSize: 38, fontWeight: FontWeight.w700, color: AppColors.primaryPink, letterSpacing: -0.5, height: 1.2)),
-                              ),
-                            ),
-                          ),
-                          FadeTransition(
-                            opacity: _sublineFadeAnimation,
-                            child: SlideTransition(
-                              position: _sublineSlideAnimation,
-                              child: Container(
-                                margin: const EdgeInsets.only(bottom: 48),
-                                child: RichText(
-                                  text: TextSpan(
-                                    style: theme.textTheme.bodyLarge?.copyWith(
-                                      fontFamily: 'Quicksand',
-                                      fontWeight: FontWeight.w500,
-                                      letterSpacing: 0.3,
-                                    ),
-                                    children: _sublineSpans,
-                                  ),
                                 ),
                               ),
-                            ),
-                          ),
-                          GestureDetector(
-                            onTap: _setRandomQuote,
-                            child: FadeTransition(
-                              opacity: _quoteFadeAnimation,
-                              child: SlideTransition(
-                                position: _quoteSlideAnimation,
-                                child: ScaleTransition(
-                                  scale: _quoteScaleAnimation,
-                                  child: Container(
-                                    padding: const EdgeInsets.all(24),
-                                    decoration: BoxDecoration(
-                                      color: theme.cardColor.withOpacity(0.4),
-                                      borderRadius: BorderRadius.circular(16),
-                                      border: Border.all(color: theme.colorScheme.primary.withOpacity(0.1), width: 1),
-                                      boxShadow: [BoxShadow(color: AppColors.shadowSoft.withOpacity(0.1), blurRadius: 8, offset: const Offset(0, 4))],
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        Container(
-                                          width: 4,
-                                          height: 40,
-                                          decoration: BoxDecoration(color: AppColors.primaryPink.withOpacity(0.6), borderRadius: BorderRadius.circular(2)),
-                                        ),
-                                        const SizedBox(width: 16),
-                                        Expanded(
-                                          child: Text(
-                                            _currentQuote,
-                                            style: GoogleFonts.quicksand(
-                                              fontSize: isSmallScreen ? 18 : 20,
-                                              fontStyle: FontStyle.italic,
-                                              fontWeight: FontWeight.w600,
-                                              letterSpacing: 0.3,
-                                              height: 1.4,
-                                              color: theme.textTheme.bodyMedium?.color?.withOpacity(0.8),
+                              GestureDetector(
+                                onTap: _setRandomQuote,
+                                child: FadeTransition(
+                                  opacity: _quoteFadeAnimation,
+                                  child: SlideTransition(
+                                    position: _quoteSlideAnimation,
+                                    child: ScaleTransition(
+                                      scale: _quoteScaleAnimation,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 18),
+                                        decoration: BoxDecoration(
+                                          color: theme.cardColor.withOpacity(0.4),
+                                          borderRadius: BorderRadius.circular(16),
+                                          border: Border.all(color: theme.colorScheme.primary.withOpacity(0.1), width: 1),
+                                          boxShadow: [BoxShadow(color: AppColors.shadowSoft.withOpacity(0.1), blurRadius: 8, offset: const Offset(0, 4))],
+                                       ),
+                                        child: Row(
+                                          children: [
+                                            Container(
+                                              width: 4,
+                                              height: 24,
+                                              decoration: BoxDecoration(color: AppColors.primaryPink.withOpacity(0.6), borderRadius: BorderRadius.circular(2)),
                                             ),
-                                          ),
+                                            const SizedBox(width: 16),
+                                            Expanded(
+                                              child: Text(
+                                                _currentQuote,
+                                                style: GoogleFonts.quicksand(
+                                                  fontSize: isSmallScreen ? 13 : 15,
+                                                  fontStyle: FontStyle.italic,
+                                                  fontWeight: FontWeight.w600,
+                                                  letterSpacing: 0.3,
+                                                  height: 1.3,
+                                                  color: theme.textTheme.bodyMedium?.color?.withOpacity(0.8),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
                                         ),
-                                      ],
+                                      ),
                                     ),
                                   ),
                                 ),
                               ),
-                            ),
+                            ],
                           ),
-                        ],
+                        ),
                       ),
-                      const Spacer(),
                     ],
                   ),
                 ),

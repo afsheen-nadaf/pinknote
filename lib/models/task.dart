@@ -52,54 +52,67 @@ class Task {
   final String title;
   final String? notes;
   final String category;
-  final int colorValue; // New: Color for the task, stored as an integer
+  final int colorValue;
   final DateTime? dueDate;
   final TimeOfDay? dueTime;
   final bool isCompleted;
   final bool isImportant;
   final List<Subtask> subtasks;
   final int order;
+  final String? recurrenceUnit;
+  final int? recurrenceValue;
+  final bool isAlarmEnabled; // Field for alarm status
 
   Task({
     required this.id,
     required this.title,
     this.notes,
     this.category = 'general',
-    this.colorValue = 0xFFF48FB1, // Default color, similar to AppColors.primaryPink
+    this.colorValue = 0xFFF48FB1, // Default color
     this.dueDate,
     this.dueTime,
     this.isCompleted = false,
     this.isImportant = false,
     this.subtasks = const [],
     required this.order,
+    this.recurrenceUnit,
+    this.recurrenceValue,
+    this.isAlarmEnabled = true, // Default alarm to true
   });
 
   // Creates a copy of the task with optional new values.
+  // FIX: Added all missing fields to ensure they are copied correctly.
   Task copyWith({
     String? id,
     String? title,
     String? notes,
     String? category,
-    int? colorValue, // Added colorValue to copyWith
+    int? colorValue,
     DateTime? dueDate,
     TimeOfDay? dueTime,
     bool? isCompleted,
     bool? isImportant,
     List<Subtask>? subtasks,
     int? order,
+    String? recurrenceUnit,
+    int? recurrenceValue,
+    bool? isAlarmEnabled,
   }) {
     return Task(
       id: id ?? this.id,
       title: title ?? this.title,
       notes: notes ?? this.notes,
       category: category ?? this.category,
-      colorValue: colorValue ?? this.colorValue, // Copy colorValue
+      colorValue: colorValue ?? this.colorValue,
       dueDate: dueDate ?? this.dueDate,
       dueTime: dueTime ?? this.dueTime,
       isCompleted: isCompleted ?? this.isCompleted,
       isImportant: isImportant ?? this.isImportant,
       subtasks: subtasks ?? this.subtasks,
       order: order ?? this.order,
+      recurrenceUnit: recurrenceUnit ?? this.recurrenceUnit,
+      recurrenceValue: recurrenceValue ?? this.recurrenceValue,
+      isAlarmEnabled: isAlarmEnabled ?? this.isAlarmEnabled,
     );
   }
 
@@ -110,7 +123,6 @@ class Task {
       throw StateError("Missing data for Task ${doc.id}");
     }
 
-    // Safely parse TimeOfDay from Firestore map
     TimeOfDay? parseTimeOfDay(Map<String, dynamic>? timeMap) {
       if (timeMap == null) return null;
       return TimeOfDay(hour: timeMap['hour'], minute: timeMap['minute']);
@@ -121,7 +133,7 @@ class Task {
       title: data['title'] ?? '',
       notes: data['notes'],
       category: data['category'] ?? 'general',
-      colorValue: data['colorValue'] as int? ?? 0xFFF48FB1, // Retrieve colorValue
+      colorValue: data['colorValue'] as int? ?? 0xFFF48FB1,
       dueDate: (data['dueDate'] as Timestamp?)?.toDate(),
       dueTime: parseTimeOfDay(data['dueTime']),
       isCompleted: data['isCompleted'] ?? false,
@@ -131,6 +143,9 @@ class Task {
               .toList() ??
           [],
       order: data['order'] ?? DateTime.now().millisecondsSinceEpoch,
+      recurrenceUnit: data['recurrenceUnit'] as String?,
+      recurrenceValue: data['recurrenceValue'] as int?,
+      isAlarmEnabled: data['isAlarmEnabled'] as bool? ?? true, // Retrieve isAlarmEnabled
     );
   }
 
@@ -140,17 +155,20 @@ class Task {
       'title': title,
       'notes': notes,
       'category': category,
-      'colorValue': colorValue, // Save colorValue
+      'colorValue': colorValue,
       'dueDate': dueDate != null ? Timestamp.fromDate(dueDate!) : null,
       'dueTime': dueTime != null ? {'hour': dueTime!.hour, 'minute': dueTime!.minute} : null,
       'isCompleted': isCompleted,
       'isImportant': isImportant,
       'subtasks': subtasks.map((s) => s.toJson()).toList(),
       'order': order,
+      'recurrenceUnit': recurrenceUnit,
+      'recurrenceValue': recurrenceValue,
+      'isAlarmEnabled': isAlarmEnabled, // Save isAlarmEnabled
     };
   }
 
-  // NEW: Creates a Task instance from a JSON map (for import).
+  // Creates a Task instance from a JSON map (for import).
   factory Task.fromJson(Map<String, dynamic> json) {
     return Task(
       id: json['id'] ?? const Uuid().v4(),
@@ -172,10 +190,13 @@ class Task {
               .toList() ??
           [],
       order: json['order'] ?? DateTime.now().millisecondsSinceEpoch,
+      recurrenceUnit: json['recurrenceUnit'] as String?,
+      recurrenceValue: json['recurrenceValue'] as int?,
+      isAlarmEnabled: json['isAlarmEnabled'] as bool? ?? true, // Retrieve from JSON
     );
   }
 
-  // NEW: Converts the Task instance to a JSON map (for export).
+  // Converts the Task instance to a JSON map (for export).
   Map<String, dynamic> toJson() {
     return {
       'id': id,
@@ -189,6 +210,9 @@ class Task {
       'isImportant': isImportant,
       'subtasks': subtasks.map((s) => s.toJson()).toList(),
       'order': order,
+      'recurrenceUnit': recurrenceUnit,
+      'recurrenceValue': recurrenceValue,
+      'isAlarmEnabled': isAlarmEnabled, // Save to JSON
     };
   }
 

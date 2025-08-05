@@ -3,7 +3,9 @@ import 'package:flutter/foundation.dart' hide Category; // Hide Category from fo
 import '../models/task.dart';
 import '../models/category.dart';
 import '../models/event.dart';
-import '../models/mood_entry.dart'; // New: Import MoodEntry and PersonalNote models
+import '../models/mood_entry.dart';
+import '../models/routine.dart';
+import '../models/routine_entry.dart';
 
 class FirestoreService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -77,6 +79,18 @@ class FirestoreService {
     // Path: artifacts/{appId}/users/{userId}/personal_notes
     return _firestore.collection('artifacts/$_appId/users/$_userId/personal_notes');
   }
+
+  // START OF ADDED CODE
+  CollectionReference<Map<String, dynamic>> _getRoutinesCollectionRef() {
+    if (_userId == null) throw Exception("User ID is not available. Call setUserId() first.");
+    return _firestore.collection('artifacts/$_appId/users/$_userId/routines');
+  }
+
+  CollectionReference<Map<String, dynamic>> _getRoutineEntriesCollectionRef() {
+    if (_userId == null) throw Exception("User ID is not available. Call setUserId() first.");
+    return _firestore.collection('artifacts/$_appId/users/$_userId/routine_entries');
+  }
+  // END OF ADDED CODE
 
   // --- Task Operations ---
 
@@ -365,6 +379,21 @@ class FirestoreService {
     }
   }
 
+  /// Toggles the importance status of an event.
+  Future<void> toggleEventImportance(String eventId, bool isImportant) async {
+    if (_userId == null) {
+      debugPrint("toggleEventImportance: User ID is null, cannot toggle event importance.");
+      return;
+    }
+    try {
+      await _getEventsCollectionRef().doc(eventId).update({'isImportant': isImportant});
+      debugPrint('Event importance toggled for ID: $eventId to $isImportant');
+    } catch (e) {
+      debugPrint('Error toggling event importance: $e');
+      rethrow;
+    }
+  }
+
   // --- Badge & User Profile Operations ---
 
   /// Saves user profile data (like avatar color/icon, email, display name) to Firestore.
@@ -372,7 +401,8 @@ class FirestoreService {
     int? avatarColorValue,
     int? avatarIconCodePoint,
     String? email,
-    String? displayName, // New: Optional display name to save
+    String? displayName,
+    DateTime? birthday,
   }) async {
     if (_userId == null) {
       debugPrint("saveUserProfileData: User ID is null, cannot save profile data.");
@@ -389,8 +419,12 @@ class FirestoreService {
       if (email != null) {
         dataToSave['email'] = email;
       }
-      if (displayName != null) { // Add display name to data to save
+      if (displayName != null) {
         dataToSave['displayName'] = displayName;
+      }
+      // MODIFIED: Add birthday to the data map if it exists
+      if (birthday != null) {
+        dataToSave['birthday'] = Timestamp.fromDate(birthday);
       }
 
       if (dataToSave.isNotEmpty) {
@@ -533,6 +567,82 @@ class FirestoreService {
     }
   }
 
+  // START OF ADDED CODE
+  // --- Routine Operations ---
+
+  Stream<List<Routine>> getRoutines() {
+    if (_userId == null) return Stream.value([]);
+    return _getRoutinesCollectionRef().orderBy('createdAt').snapshots().map((snapshot) {
+      return snapshot.docs.map((doc) => Routine.fromFirestore(doc)).toList();
+    });
+  }
+
+  Future<void> addRoutine(Routine routine) async {
+    if (_userId == null) return;
+    await _getRoutinesCollectionRef().doc(routine.id).set(routine.toFirestore());
+  }
+
+  Future<void> deleteRoutine(String routineId) async {
+    if (_userId == null) return;
+    final batch = _firestore.batch();
+    batch.delete(_getRoutinesCollectionRef().doc(routineId));
+    final entriesSnapshot = await _getRoutineEntriesCollectionRef().where('routineId', isEqualTo: routineId).get();
+    for (final doc in entriesSnapshot.docs) {
+      batch.delete(doc.reference);
+    }
+    await batch.commit();
+  }
+
+  // --- Routine Entry Operations ---
+
+  Stream<List<RoutineEntry>> getRoutineEntriesForWeek(DateTime startDate, DateTime endDate) {
+    if (_userId == null) return Stream.value([]);
+    final start = DateTime(startDate.year, startDate.month, startDate.day);
+    final end = DateTime(endDate.year, endDate.month, endDate.day, 23, 59, 59);
+    return _getRoutineEntriesCollectionRef()
+        .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(start))
+        .where('date', isLessThanOrEqualTo: Timestamp.fromDate(end))
+        .snapshots()
+        .map((snapshot) => snapshot.docs.map((doc) => RoutineEntry.fromFirestore(doc)).toList());
+  }
+
+  Future<void> updateRoutineEntryStatus(String routineId, DateTime date, RoutineStatus newStatus) async {
+    if (_userId == null) return;
+
+    final dateOnly = DateTime(date.year, date.month, date.day);
+    final entryId = '$routineId-${dateOnly.toIso8601String().split('T').first}';
+    final entryRef = _getRoutineEntriesCollectionRef().doc(entryId);
+
+    int currentStreak = 0;
+    if (newStatus == RoutineStatus.completed) {
+      final yesterday = dateOnly.subtract(const Duration(days: 1));
+      final yesterdayId = '$routineId-${yesterday.toIso8601String().split('T').first}';
+      final yesterdayEntryDoc = await _getRoutineEntriesCollectionRef().doc(yesterdayId).get();
+
+      if (yesterdayEntryDoc.exists) {
+        final yesterdayEntry = RoutineEntry.fromFirestore(yesterdayEntryDoc);
+        if (yesterdayEntry.status == RoutineStatus.completed) {
+          currentStreak = yesterdayEntry.streak + 1;
+        } else {
+          currentStreak = 1;
+        }
+      } else {
+        currentStreak = 1;
+      }
+    }
+
+    final entry = RoutineEntry(
+      id: entryId,
+      routineId: routineId,
+      date: dateOnly,
+      status: newStatus,
+      streak: currentStreak,
+    );
+
+    await entryRef.set(entry.toFirestore(), SetOptions(merge: true));
+  }
+  // END OF ADDED CODE
+
   void saveUnlockedBadges(Set<String> unlockedBadgeIds) {
     if (_userId == null) {
       debugPrint("saveUnlockedBadges: User ID is null, cannot save badges.");
@@ -569,6 +679,10 @@ class FirestoreService {
     await deleteCollection(_getEventsCollectionRef());
     await deleteCollection(_getMoodEntriesCollectionRef());
     await deleteCollection(_getPersonalNotesCollectionRef());
+    // START OF ADDED CODE
+    await deleteCollection(_getRoutinesCollectionRef());
+    await deleteCollection(_getRoutineEntriesCollectionRef());
+    // END OF ADDED CODE
 
     // Delete the user profile document
     batch.delete(_getUserDataDocRef());

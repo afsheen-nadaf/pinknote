@@ -3,6 +3,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:intl/intl.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 // Import WelcomeScreen to navigate to it
 import 'package:pinknote/screens/welcome_screen.dart';
 import '../utils/app_constants.dart';
@@ -38,6 +40,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
   late TextEditingController _emailController;
   Color _currentAvatarColor = AppColors.primaryPink.withOpacity(0.2);
   IconData _currentAvatarIcon = Icons.person_rounded;
+  DateTime? _birthday;
 
   final List<IconData> _fruitIcons = const [
     Icons.apple_rounded,
@@ -121,9 +124,17 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
             _emailController.text = _currentUser!.email!;
           }
           if (profileData.containsKey('displayName')) {
-            _displayNameController.text = profileData['displayName'] as String;
+            final newName = profileData['displayName'] as String;
+            if (_displayNameController.text != newName) {
+              _displayNameController.text = newName;
+            }
           } else if (_currentUser?.displayName != null) {
             _displayNameController.text = _currentUser!.displayName!;
+          }
+          if (profileData.containsKey('birthday') && profileData['birthday'] != null) {
+            _birthday = (profileData['birthday'] as Timestamp).toDate();
+          } else {
+            _birthday = null;
           }
         });
       }
@@ -235,7 +246,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
             text: 'clocked in',
             tagline: 'your first scheduled task, right on time!',
             icon: Icons.access_time_rounded,
-            color: AppColors.accentBlue,
+            color: AppColors.accentCoral,
             isUnlocked: true,
           );
         } else if (badgeId == _categoryMasterBadgeId) {
@@ -623,14 +634,12 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                     ),
                     const SizedBox(height: 32),
                     Row(
-                      // Modified: Changed mainAxisAlignment to spaceBetween
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         TextButton(
                           onPressed: () => Navigator.of(context).pop(),
                           child: Text('cancel', style: GoogleFonts.poppins(color: AppColors.errorRed, fontWeight: FontWeight.bold)),
                         ),
-                        // Removed SizedBox here as spaceBetween handles spacing
                         ElevatedButton(
                           onPressed: () async {
                             if (_currentUser != null) {
@@ -671,6 +680,31 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
     );
   }
 
+  Future<void> _selectBirthday(BuildContext context) async {
+    final DateTime? picked = await showDialog<DateTime>(
+      context: context,
+      builder: (BuildContext context) {
+        return _CustomBirthdayPicker(
+          initialDate: _birthday ?? DateTime.now(),
+        );
+      },
+    );
+
+    if (picked != null && picked != _birthday) {
+      setState(() {
+        _birthday = picked;
+      });
+      await widget.firestoreService.saveUserProfileData(birthday: picked);
+      if (_displayNameController.text.isNotEmpty) {
+        await notificationService.scheduleBirthdayNotification(
+          context: context,
+          userName: _displayNameController.text,
+          birthDate: picked,
+        );
+      }
+    }
+  }
+
   void _confirmLogout() {
     showDialog(
       context: context,
@@ -706,24 +740,19 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
     );
   }
 
-  // MODIFIED: This function now navigates directly to WelcomeScreen
   Future<void> _logOut() async {
     await FirebaseAuth.instance.signOut();
     if (mounted) {
-      // This removes all existing screens and pushes WelcomeScreen as the new home.
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(
           builder: (context) => WelcomeScreen(
             firestoreService: widget.firestoreService,
-            // This callback handles what happens after a user logs in or signs up again.
             onOnboardingComplete: () {
-              // After successful login from WelcomeScreen, go to the main app screen.
               Navigator.of(context).pushReplacementNamed('/home');
             },
             showEmailVerificationPrompt: false,
           ),
         ),
-        // This predicate removes all routes below the new one, clearing the stack.
         (Route<dynamic> route) => false,
       );
     }
@@ -784,7 +813,6 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('account deleted successfully.')),
         );
-        // Also navigate to WelcomeScreen after deleting the account
         Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute(
             builder: (context) => WelcomeScreen(
@@ -869,11 +897,11 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                     const SizedBox(height: 20),
                     _buildProfileCard(
                       title: 'user info',
-                      content: GestureDetector(
-                        onTap: _showEditProfileModal,
-                        child: Row(
-                          children: [
-                            CircleAvatar(
+                      content: Row(
+                        children: [
+                          GestureDetector(
+                            onTap: _showEditProfileModal,
+                            child: CircleAvatar(
                               radius: 40,
                               backgroundColor: _currentAvatarColor,
                               child: Icon(
@@ -882,27 +910,46 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                                 color: Colors.white,
                               ),
                             ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _displayNameController.text.toLowerCase().isNotEmpty
+                                      ? _displayNameController.text.toLowerCase()
+                                      : (_currentUser?.displayName?.toLowerCase() ?? 'guest user'),
+                                  style: Theme.of(context).textTheme.titleLarge,
+                                ),
+                                if (_emailController.text.isNotEmpty)
                                   Text(
-                                    _displayNameController.text.toLowerCase().isNotEmpty
-                                        ? _displayNameController.text.toLowerCase()
-                                        : (_currentUser?.displayName?.toLowerCase() ?? 'guest user'),
-                                    style: Theme.of(context).textTheme.titleLarge,
+                                    _emailController.text.toLowerCase(),
+                                    style: Theme.of(context).textTheme.bodyMedium,
                                   ),
-                                  if (_emailController.text.isNotEmpty)
-                                    Text(
-                                      _emailController.text.toLowerCase(),
-                                      style: Theme.of(context).textTheme.bodyMedium,
-                                    ),
-                                ],
-                              ),
+                                const SizedBox(height: 8),
+                                GestureDetector(
+                                  onTap: () => _selectBirthday(context),
+                                  child: Row(
+                                    children: [
+                                      const Icon(Icons.cake_outlined, color: AppColors.primaryPink, size: 18),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        _birthday == null
+                                            ? 'add your birthday!'
+                                            : DateFormat.yMMMMd().format(_birthday!).toLowerCase(),
+                                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                          color: AppColors.primaryPink,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
                     ),
                     StreamBuilder<List<Task>>(
@@ -998,7 +1045,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                                 id: _clockedInBadgeId,
                                 text: 'clocked in',
                                 icon: Icons.access_time_rounded,
-                                color: AppColors.accentBlue,
+                                color: AppColors.accentCoral,
                                 tagline: 'your first scheduled task, right on time!',
                               ),
                               _buildBadge(
@@ -1125,6 +1172,216 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// MODIFIED: Custom Birthday Picker Widget updated to remove text input feature
+class _CustomBirthdayPicker extends StatefulWidget {
+  final DateTime initialDate;
+
+  const _CustomBirthdayPicker({required this.initialDate});
+
+  @override
+  _CustomBirthdayPickerState createState() => _CustomBirthdayPickerState();
+}
+
+class _CustomBirthdayPickerState extends State<_CustomBirthdayPicker> {
+  late DateTime _selectedDate;
+  late DateTime _currentMonth;
+  bool _isPickingYear = false;
+  late ScrollController _yearScrollController;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedDate = widget.initialDate;
+    _currentMonth = DateTime(widget.initialDate.year, widget.initialDate.month);
+    // Calculate the initial offset to center the selected year
+    final initialYearIndex = DateTime.now().year - _selectedDate.year;
+    _yearScrollController = ScrollController(initialScrollOffset: initialYearIndex * 40.0);
+  }
+  
+  @override
+  void dispose() {
+    _yearScrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDarkMode = theme.brightness == Brightness.dark;
+    final dialogBackgroundColor = isDarkMode ? AppColors.darkBackground : AppColors.softCream;
+    final textColor = isDarkMode ? AppColors.lightGrey : AppColors.textDark;
+    const pinkColor = AppColors.primaryPink;
+
+    return Dialog(
+      backgroundColor: dialogBackgroundColor,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 320),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildHeader(theme, pinkColor),
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 300),
+              transitionBuilder: (child, animation) {
+                return FadeTransition(opacity: animation, child: child);
+              },
+              child: _isPickingYear
+                  ? _buildYearPicker(textColor)
+                  : _buildCalendar(theme, textColor, pinkColor),
+            ),
+            _buildActions(theme, pinkColor),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeader(ThemeData theme, Color pinkColor) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          InkWell(
+            onTap: () => setState(() => _isPickingYear = !_isPickingYear),
+            child: Text(
+              DateFormat('MMMM yyyy').format(_currentMonth).toLowerCase(),
+              style: theme.textTheme.titleMedium?.copyWith(color: pinkColor, fontWeight: FontWeight.bold),
+            ),
+          ),
+          if (!_isPickingYear)
+            Row(
+              children: [
+                IconButton(
+                  icon: Icon(Icons.chevron_left, color: pinkColor),
+                  onPressed: () => setState(() => _currentMonth = DateTime(_currentMonth.year, _currentMonth.month - 1)),
+                ),
+                IconButton(
+                  icon: Icon(Icons.chevron_right, color: pinkColor),
+                  onPressed: () => setState(() => _currentMonth = DateTime(_currentMonth.year, _currentMonth.month + 1)),
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildYearPicker(Color textColor) {
+    final currentYear = DateTime.now().year;
+    return SizedBox(
+      height: 250,
+      child: GridView.builder(
+        controller: _yearScrollController,
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 4,
+          childAspectRatio: 1.6,
+        ),
+        itemCount: currentYear - 1900 + 1,
+        itemBuilder: (context, index) {
+          final year = currentYear - index;
+          final isSelected = year == _currentMonth.year;
+          return InkWell(
+            onTap: () {
+              setState(() {
+                _currentMonth = DateTime(year, _currentMonth.month);
+                _isPickingYear = false;
+              });
+            },
+            child: Center(
+              child: Container(
+                decoration: BoxDecoration(
+                  color: isSelected ? AppColors.primaryPink.withOpacity(0.8) : Colors.transparent,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                padding: const EdgeInsets.all(8),
+                child: Text(
+                  year.toString(),
+                  style: TextStyle(
+                    color: isSelected ? Colors.white : textColor,
+                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildCalendar(ThemeData theme, Color textColor, Color pinkColor) {
+    final daysInMonth = DateTime(_currentMonth.year, _currentMonth.month + 1, 0).day;
+    final firstWeekday = DateTime(_currentMonth.year, _currentMonth.month, 1).weekday % 7;
+    final weekdays = ['s', 'm', 't', 'w', 't', 'f', 's'];
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: weekdays.map((day) => Text(day, style: theme.textTheme.bodySmall?.copyWith(color: textColor.withOpacity(0.7)))).toList(),
+          ),
+          const SizedBox(height: 8),
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 7,
+            ),
+            itemCount: daysInMonth + firstWeekday,
+            itemBuilder: (context, index) {
+              if (index < firstWeekday) return Container();
+              final day = index - firstWeekday + 1;
+              final date = DateTime(_currentMonth.year, _currentMonth.month, day);
+              final isSelected = DateUtils.isSameDay(date, _selectedDate);
+
+              return GestureDetector(
+                onTap: () => setState(() => _selectedDate = date),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: isSelected ? pinkColor : Colors.transparent,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Center(
+                    child: Text(
+                      day.toString(),
+                      style: TextStyle(color: isSelected ? Colors.white : textColor),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActions(ThemeData theme, Color pinkColor) {
+    return Padding(
+      padding: const EdgeInsets.all(8.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          TextButton(
+            child: Text('cancel', style: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.7))),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+          TextButton(
+            child: Text('ok', style: TextStyle(color: pinkColor, fontWeight: FontWeight.bold)),
+            onPressed: () {
+              Navigator.of(context).pop(_selectedDate);
+            },
+          ),
+        ],
       ),
     );
   }

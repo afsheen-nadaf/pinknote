@@ -454,29 +454,19 @@ we might update the app or these rules now and then. we’ll let you know if any
                           trailing: Switch(
                             value:
                                 notificationService.isNotificationsEnabled,
-                            onChanged: (bool value) async {
-                              setState(() {
-                                notificationService
-                                    .setNotificationPreference(value);
-                              });
-                              if (value) {
-                                await notificationService
-                                    .scheduleDailyGoodMorningNotification(
-                                        context);
-                                await notificationService
-                                    .scheduleDailyMoodReminderNotification(
-                                        context);
-                              }
+                            onChanged: (bool value) {
+                              // **FIX:** Pass the context to the updated method.
+                              notificationService.setNotificationPreference(value, context);
+                              setState(() {}); // Rebuild to reflect the change
                             },
                             activeColor: AppColors.primaryPink,
                             inactiveThumbColor: AppColors.borderLight,
                           ),
                           onTap: () {
-                            setState(() {
-                              notificationService.setNotificationPreference(
-                                  !notificationService
-                                      .isNotificationsEnabled);
-                            });
+                            // **FIX:** Also update the onTap handler.
+                            final bool currentValue = notificationService.isNotificationsEnabled;
+                            notificationService.setNotificationPreference(!currentValue, context);
+                            setState(() {}); // Rebuild to reflect the change
                           },
                         ),
                       ],
