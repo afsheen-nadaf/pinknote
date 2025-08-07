@@ -2,7 +2,7 @@ name: pinknote
 description: A pastel to-do list Flutter app
 publish_to: "none"
 
-version: 1.0.8+8
+version: 1.0.9+9
 
 environment:
   # FIXED: Updated to a recent stable SDK constraint
