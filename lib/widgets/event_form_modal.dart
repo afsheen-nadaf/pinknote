@@ -173,6 +173,18 @@ class _EventFormModalState extends State<EventFormModal> {
           savedEvent.startTime!.hour,
           savedEvent.startTime!.minute,
         );
+        
+        // *** ADDED: Construct the full end date and time for the event. ***
+        DateTime? finalEventEndDate;
+        if (savedEvent.endDate != null && savedEvent.endTime != null) {
+          finalEventEndDate = DateTime(
+            savedEvent.endDate!.year,
+            savedEvent.endDate!.month,
+            savedEvent.endDate!.day,
+            savedEvent.endTime!.hour,
+            savedEvent.endTime!.minute,
+          );
+        }
 
         notificationService.scheduleReminderNotification(
           id: NotificationService.createIntIdFromString(savedEvent.id),
@@ -183,6 +195,7 @@ class _EventFormModalState extends State<EventFormModal> {
           type: 'event',
           recurrenceUnit: savedEvent.recurrenceUnit,
           recurrenceValue: savedEvent.recurrenceValue,
+          eventEndDate: finalEventEndDate, // *** ADDED: Pass the end date to the notification service. ***
         );
       }
       Navigator.of(context).pop();
@@ -246,7 +259,8 @@ class _EventFormModalState extends State<EventFormModal> {
           TextButton(
             onPressed: () {
               if (widget.onDelete != null && widget.event != null) {
-                notificationService.cancelNotification(NotificationService.createIntIdFromString(widget.event!.id));
+                // This call is now handled by the FirestoreService deleteEvent method
+                // notificationService.cancelNotification(NotificationService.createIntIdFromString(widget.event!.id));
                 widget.onDelete!(widget.event!.id);
               }
               Navigator.pop(context);
@@ -272,7 +286,8 @@ class _EventFormModalState extends State<EventFormModal> {
     soundService.playModalOpeningSound();
     int tempValue = _recurrenceValue;
     String tempUnit = _recurrenceUnit ?? 'day';
-    final units = ['minute', 'hour', 'day', 'month', 'year'];
+    // *** MODIFIED: Add 'week' to the list of recurrence units. ***
+    final units = ['minute', 'hour', 'day', 'week', 'month', 'year'];
 
     final FixedExtentScrollController valueController = FixedExtentScrollController(initialItem: tempValue - 1);
     final FixedExtentScrollController unitController = FixedExtentScrollController(initialItem: units.indexOf(tempUnit));

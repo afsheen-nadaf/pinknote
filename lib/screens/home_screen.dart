@@ -620,7 +620,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.watch_later_outlined, color: AppColors.primaryPink, size: 32),
+                const Icon(Icons.watch_later_outlined, color: AppColors.primaryPink, size: 32),
                 const SizedBox(height: 8),
                 Text(
                   "routines",

@@ -230,7 +230,7 @@ class _TaskFormModalState extends State<TaskFormModal> {
     final bool isRecurrenceEnabled = _recurrenceUnit != null;
     String recurrenceText = 'no repeat';
     if (isRecurrenceEnabled) {
-      recurrenceText = 'repeats every ${_recurrenceValue > 1 ? _recurrenceValue : ''} ${_recurrenceUnit ?? 'day'}${_recurrenceValue > 1 ? 's' : ''}';
+      recurrenceText = 'repeats every${_recurrenceValue > 1 ? _recurrenceValue : ''} ${_recurrenceUnit ?? 'day'}${_recurrenceValue > 1 ? 's' : ''}';
     }
 
     return Card(
@@ -314,7 +314,8 @@ class _TaskFormModalState extends State<TaskFormModal> {
         if (widget.task != null)
           TextButton(
             onPressed: () {
-              notificationService.cancelNotification(NotificationService.createIntIdFromString(widget.task!.id));
+              // This call is now handled by the FirestoreService deleteTask method
+              // notificationService.cancelNotification(NotificationService.createIntIdFromString(widget.task!.id));
               widget.onDeleteTask?.call();
               Navigator.pop(context);
             },
@@ -438,7 +439,8 @@ class _TaskFormModalState extends State<TaskFormModal> {
     soundService.playModalOpeningSound();
     int tempValue = _recurrenceValue;
     String tempUnit = _recurrenceUnit ?? 'day';
-    final units = ['minute', 'hour', 'day', 'month', 'year'];
+    // *** MODIFIED: Add 'week' to the list of recurrence units. ***
+    final units = ['minute', 'hour', 'day', 'week', 'month', 'year'];
 
     final FixedExtentScrollController valueController = FixedExtentScrollController(initialItem: tempValue - 1);
     final FixedExtentScrollController unitController = FixedExtentScrollController(initialItem: units.indexOf(tempUnit));
@@ -551,7 +553,7 @@ class _TaskFormModalState extends State<TaskFormModal> {
     final theme = Theme.of(context);
     return TextFormField(
       controller: _titleController,
-      validator: (value) => (value == null || value.trim().isEmpty) ? 'Title cannot be empty' : null,
+      validator: (value) => (value == null || value.trim().isEmpty) ? 'title cannot be empty' : null,
       style: theme.textTheme.titleMedium,
       decoration: InputDecoration(
         labelText: 'task title',

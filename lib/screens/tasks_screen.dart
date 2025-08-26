@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:ui';
+import 'package:intl/intl.dart'; // Added for date formatting
 import '../models/task.dart';
 import '../models/category.dart';
 import '../utils/app_constants.dart';
@@ -32,7 +33,14 @@ class TasksScreen extends StatefulWidget {
 }
 
 class _TasksScreenState extends State<TasksScreen> with SingleTickerProviderStateMixin {
+  // --- MODIFIED: State variables for filtering and sorting ---
   bool _showImportantOnly = false;
+  String? _selectedCategory;
+  bool? _dateSortAscending; // null = no sort, true = ascending, false = descending
+  // DateTime? _selectedDate; // MODIFICATION: Added for week day filter
+  // DateTime _focusedDateForWeekView = DateTime.now(); // MODIFICATION: For week swiping
+  // --- End of modification ---
+
   late final AnimationController _animationController;
   late final Animation<double> _fadeInAnimation;
   final Set<String> _dismissedTaskIds = {};
@@ -136,6 +144,60 @@ class _TasksScreenState extends State<TasksScreen> with SingleTickerProviderStat
     await widget.firestoreService.reorderTasks(reorderedTasks);
   }
 
+  // --- MODIFIED: Methods for handling filters ---
+
+  void _selectCategoryFilter() async {
+    final theme = Theme.of(context);
+    final isDarkMode = theme.brightness == Brightness.dark;
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: isDarkMode ? AppColors.darkGrey : AppColors.softCream,
+          title: const Text(
+            'filter by category',
+            style: TextStyle(color: AppColors.primaryPink),
+          ),
+          content: SizedBox(
+            width: double.minPositive,
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: widget.availableCategories.length,
+              itemBuilder: (context, index) {
+                final category = widget.availableCategories[index];
+                // MODIFICATION: Added leading color circle to list tile
+                return ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: category.color,
+                    radius: 12,
+                  ),
+                  title: Text(category.name),
+                  onTap: () {
+                    setState(() {
+                      _selectedCategory = category.name;
+                    });
+                    Navigator.of(context).pop();
+                  },
+                );
+              },
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _clearFilters() {
+    setState(() {
+      _showImportantOnly = false;
+      _selectedCategory = null;
+      _dateSortAscending = null;
+      // _selectedDate = null; // MODIFICATION: Clear selected date
+      // _focusedDateForWeekView = DateTime.now(); // MODIFICATION: Reset week view
+    });
+  }
+  // --- End of modification ---
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -152,12 +214,36 @@ class _TasksScreenState extends State<TasksScreen> with SingleTickerProviderStat
 
             final allTasks = snapshot.data!.where((task) => !_dismissedTaskIds.contains(task.id)).toList();
             
-            final incompleteTasks = allTasks.where((task) => !task.isCompleted).toList();
-            final completedTasks = allTasks.where((task) => task.isCompleted).toList();
+            // --- MODIFIED: Apply all active filters and sorting ---
+            var filteredIncompleteTasks = allTasks.where((task) => !task.isCompleted).toList();
+            if (_showImportantOnly) {
+              filteredIncompleteTasks = filteredIncompleteTasks.where((t) => t.isImportant).toList();
+            }
+            if (_selectedCategory != null) {
+              filteredIncompleteTasks = filteredIncompleteTasks.where((t) => t.category == _selectedCategory).toList();
+            }
+            // MODIFICATION: Added filtering by selected date
+            // if (_selectedDate != null) {
+            //   filteredIncompleteTasks = filteredIncompleteTasks.where((task) {
+            //     if (task.dueDate == null) return false;
+            //     return task.dueDate!.year == _selectedDate!.year &&
+            //            task.dueDate!.month == _selectedDate!.month &&
+            //            task.dueDate!.day == _selectedDate!.day;
+            //   }).toList();
+            // }
+            if (_dateSortAscending != null) {
+              filteredIncompleteTasks.sort((a, b) {
+                if (a.dueDate == null && b.dueDate == null) return 0;
+                if (a.dueDate == null) return 1;
+                if (b.dueDate == null) return -1;
+                return _dateSortAscending! ? a.dueDate!.compareTo(b.dueDate!) : b.dueDate!.compareTo(a.dueDate!);
+              });
+            }
+            // --- End of modification ---
 
+            final completedTasks = allTasks.where((task) => task.isCompleted).toList();
             final totalTasks = allTasks.length;
             final progress = totalTasks > 0 ? completedTasks.length / totalTasks : 0.0;
-            final filteredIncompleteTasks = _showImportantOnly ? incompleteTasks.where((t) => t.isImportant).toList() : incompleteTasks;
 
             if (snapshot.hasData && _animationController.status == AnimationStatus.dismissed) {
               _animationController.forward();
@@ -234,6 +320,10 @@ class _TasksScreenState extends State<TasksScreen> with SingleTickerProviderStat
                       ),
                     ),
                   ),
+                  // MODIFICATION: Added week view widget
+                  // SliverToBoxAdapter(
+                  //   child: _buildWeekView(),
+                  // ),
                   SliverToBoxAdapter(
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
@@ -247,51 +337,9 @@ class _TasksScreenState extends State<TasksScreen> with SingleTickerProviderStat
                         color: theme.cardColor,
                         child: Column(
                           children: [
-                            Padding(
-                              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.end,
-                                children: [
-                                  FilterChip(
-                                    showCheckmark: false,
-                                    label: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(
-                                          Icons.star_rounded,
-                                          size: 20,
-                                          color: _showImportantOnly ? Colors.white : AppColors.primaryPink,
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Text(
-                                          'important tasks',
-                                          style: GoogleFonts.poppins(
-                                            color: _showImportantOnly ? Colors.white : AppColors.primaryPink,
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 14,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    selected: _showImportantOnly,
-                                    onSelected: (bool selected) {
-                                      setState(() {
-                                        _showImportantOnly = selected;
-                                      });
-                                    },
-                                    selectedColor: AppColors.primaryPink,
-                                    backgroundColor: theme.cardColor,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(20),
-                                      side: BorderSide(
-                                        color: _showImportantOnly ? AppColors.primaryPink : AppColors.borderLight.withOpacity(0.5),
-                                        width: 1,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
+                            // --- MODIFIED: Replaced filter bar with a single filter button ---
+                            _buildFilterButton(),
+                            // --- End of modification ---
                             if (filteredIncompleteTasks.isEmpty && completedTasks.isNotEmpty)
                               Padding(
                                 padding: const EdgeInsets.symmetric(vertical: 32.0),
@@ -489,6 +537,254 @@ class _TasksScreenState extends State<TasksScreen> with SingleTickerProviderStat
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
     );
   }
+
+  // --- MODIFICATION: Added week view widget ---
+  /*
+  Widget _buildWeekView() {
+    final today = DateTime.now();
+    final startOfWeek = _focusedDateForWeekView.subtract(Duration(days: _focusedDateForWeekView.weekday - 1));
+    final weekDates = List.generate(7, (index) => startOfWeek.add(Duration(days: index)));
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center, // MODIFICATION: Center the items
+            children: [
+              IconButton(
+                icon: const Icon(Icons.chevron_left_rounded, color: AppColors.primaryPink), // MODIFICATION: Color
+                onPressed: () {
+                  setState(() {
+                    _focusedDateForWeekView = DateTime(_focusedDateForWeekView.year, _focusedDateForWeekView.month - 1, 1);
+                  });
+                },
+              ),
+              Text(
+                DateFormat('MMM yyyy').format(_focusedDateForWeekView).toLowerCase(), // MODIFICATION: Format and lowercase
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.chevron_right_rounded, color: AppColors.primaryPink), // MODIFICATION: Color
+                onPressed: () {
+                  setState(() {
+                    _focusedDateForWeekView = DateTime(_focusedDateForWeekView.year, _focusedDateForWeekView.month + 1, 1);
+                  });
+                },
+              ),
+            ],
+          ),
+        ),
+        GestureDetector(
+          onHorizontalDragEnd: (details) {
+            if (details.primaryVelocity! < 0) {
+              setState(() {
+                _focusedDateForWeekView = _focusedDateForWeekView.add(const Duration(days: 7));
+              });
+            } else if (details.primaryVelocity! > 0) {
+              setState(() {
+                _focusedDateForWeekView = _focusedDateForWeekView.subtract(const Duration(days: 7));
+              });
+            }
+          },
+          child: Container(
+            height: 65,
+            child: Center(
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                shrinkWrap: true,
+                itemCount: weekDates.length,
+                itemBuilder: (context, index) {
+                  final date = weekDates[index];
+                  final isSelected = _selectedDate != null &&
+                      date.year == _selectedDate!.year &&
+                      date.month == _selectedDate!.month &&
+                      date.day == _selectedDate!.day;
+                  final isToday = date.year == today.year && date.month == today.month && date.day == today.day;
+
+                  return GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        if (isSelected) {
+                          _selectedDate = null;
+                        } else {
+                          _selectedDate = date;
+                        }
+                      });
+                    },
+                    child: Container(
+                      width: 45,
+                      margin: const EdgeInsets.symmetric(horizontal: 2),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Container(
+                            width: 38,
+                            height: 38,
+                            decoration: BoxDecoration(
+                              color: isSelected ? AppColors.primaryPink : Colors.transparent,
+                              borderRadius: BorderRadius.circular(19),
+                              border: Border.all(
+                                color: isToday && !isSelected ? AppColors.primaryPink : Colors.grey.withOpacity(0.3),
+                                width: 1.5,
+                              ),
+                            ),
+                            child: Center(
+                              child: Text(
+                                DateFormat('d').format(date),
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                  color: isSelected ? Colors.white : (isDarkMode ? Colors.white : Colors.black),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            DateFormat('E').format(date).toLowerCase(),
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                              color: isSelected ? AppColors.primaryPink : (isDarkMode ? Colors.white70 : Colors.black54),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+  */
+
+  // --- MODIFIED: Widget for the new filter button and menu ---
+  Widget _buildFilterButton() {
+    final theme = Theme.of(context);
+    final isDarkMode = theme.brightness == Brightness.dark;
+    final bool isAnyFilterActive = _showImportantOnly || _selectedCategory != null || _dateSortAscending != null; // || _selectedDate != null;
+    final filterTextColor = isDarkMode ? Colors.white : Colors.black;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          if (isAnyFilterActive)
+            ActionChip(
+              avatar: const Icon(Icons.clear_rounded, size: 18, color: AppColors.primaryPink),
+              label: Text('clear filters', style: TextStyle(color: filterTextColor)),
+              onPressed: _clearFilters,
+              shape: StadiumBorder(
+                side: BorderSide(color: AppColors.primaryPink.withOpacity(0.8), width: 1.5)
+              ),
+            ),
+          const SizedBox(width: 8),
+          PopupMenuButton<String>(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(15.0),
+            ),
+            color: isDarkMode ? AppColors.darkGrey : AppColors.softCream,
+            onSelected: (value) {
+              if (!mounted) return;
+
+              if (value == 'category') {
+                Future.delayed(const Duration(milliseconds: 50), _selectCategoryFilter);
+              } else {
+                setState(() {
+                  switch (value) {
+                    case 'important':
+                      _showImportantOnly = !_showImportantOnly;
+                      break;
+                    case 'date_asc':
+                      _dateSortAscending = true;
+                      break;
+                    case 'date_desc':
+                      _dateSortAscending = false;
+                      break;
+                  }
+                });
+              }
+            },
+            itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+              PopupMenuItem<String>(
+                value: 'important',
+                child: Row(
+                  children: const [
+                    Icon(Icons.star_rounded, color: AppColors.accentYellow, size: 20),
+                    SizedBox(width: 12),
+                    Text('important'),
+                  ],
+                ),
+              ),
+              PopupMenuItem<String>(
+                value: 'category',
+                child: Row(
+                  children: const [
+                    Icon(Icons.folder_rounded, color: AppColors.primaryPink, size: 20),
+                    SizedBox(width: 12),
+                    Text('category'),
+                  ],
+                ),
+              ),
+              // MODIFICATION: Removed 'enabled: false' to make icons fully opaque
+              PopupMenuItem<String>(
+                padding: const EdgeInsets.only(left: 16, right: 8),
+                child: Row(
+                  children: [
+                    const Icon(Icons.calendar_today_rounded, color: AppColors.accentBlue, size: 20),
+                    const SizedBox(width: 12),
+                    Text('date', style: TextStyle(color: isDarkMode ? Colors.white : Colors.black)),
+                    const Spacer(),
+                    InkWell(
+                      onTap: () => Navigator.of(context).pop('date_asc'),
+                      child: const Padding(
+                        padding: EdgeInsets.all(8.0),
+                        child: Icon(Icons.arrow_upward_rounded, color: AppColors.accentGreen),
+                      ),
+                    ),
+                    InkWell(
+                      onTap: () => Navigator.of(context).pop('date_desc'),
+                      child: const Padding(
+                        padding: EdgeInsets.all(8.0),
+                        child: Icon(Icons.arrow_downward_rounded, color: AppColors.errorRed),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            child: Chip(
+              // MODIFICATION: Set filter icon color to be pink always
+              avatar: const Icon(
+                Icons.filter_list_rounded,
+                color: AppColors.primaryPink,
+              ),
+              label: Text('filter', style: TextStyle(color: filterTextColor)),
+              backgroundColor: Theme.of(context).cardColor,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+                side: BorderSide(
+                  color: AppColors.borderLight.withOpacity(0.5),
+                  width: 1,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  // --- End of added widget ---
 
   Widget _buildEmptyState({
     required IconData icon,

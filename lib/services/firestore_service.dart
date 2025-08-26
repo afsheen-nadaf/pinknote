@@ -6,6 +6,7 @@ import '../models/event.dart';
 import '../models/mood_entry.dart';
 import '../models/routine.dart';
 import '../models/routine_entry.dart';
+import 'services.dart'; // *** ADDED: Import services to access NotificationService.
 
 class FirestoreService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -144,6 +145,11 @@ class FirestoreService {
       return;
     }
     try {
+      // *** MODIFIED: Cancel notifications when a task is marked as complete. ***
+      if (isCompleted) {
+        notificationService.cancelNotification(NotificationService.createIntIdFromString(taskId));
+      }
+      
       // FIX: The boolean passed in (`isCompleted`) is the NEW desired state.
       // We should use it directly instead of negating it again.
       await _getTasksCollectionRef().doc(taskId).update({'isCompleted': isCompleted});
@@ -202,6 +208,8 @@ class FirestoreService {
       return;
     }
     try {
+      // *** MODIFIED: Cancel notifications before deleting the task. ***
+      notificationService.cancelNotification(NotificationService.createIntIdFromString(taskId));
       await _getTasksCollectionRef().doc(taskId).delete();
       debugPrint('Task deleted: $taskId');
     } catch (e) {

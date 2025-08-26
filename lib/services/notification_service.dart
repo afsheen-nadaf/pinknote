@@ -90,6 +90,7 @@ class NotificationService {
     required String type,
     String? recurrenceUnit,
     int? recurrenceValue,
+    DateTime? eventEndDate, // *** ADDED: To stop recurring events after their end date.
   }) async {
     if (!await _requestPermissions(context)) {
       debugPrint("Skipping reminder for '${title.toLowerCase()}' due to permissions.");
@@ -134,6 +135,10 @@ class NotificationService {
           case 'day':
             nextDate = scheduledDate.add(Duration(days: i * val));
             break;
+          // *** MODIFIED: Add 'week' case for recurrence. ***
+          case 'week':
+            nextDate = scheduledDate.add(Duration(days: i * val * 7));
+            break;
           case 'month':
             nextDate = DateTime(scheduledDate.year, scheduledDate.month + (i * val), scheduledDate.day, scheduledDate.hour, scheduledDate.minute);
             break;
@@ -144,6 +149,12 @@ class NotificationService {
 
         if (nextDate == null || nextDate.isBefore(DateTime.now())) {
           continue; // Skip past or invalid dates
+        }
+
+        // *** MODIFIED: Stop scheduling recurring events if they are past their end date. ***
+        if (type == 'event' && eventEndDate != null && nextDate.isAfter(eventEndDate)) {
+          debugPrint("Stopping recurring schedule for '$title' as it has passed the event's end date.");
+          break;
         }
 
         if (i == 0 && type == 'event') {
