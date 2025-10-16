@@ -732,7 +732,7 @@ class _EventFormModalState extends State<EventFormModal> {
     final bool isRecurrenceEnabled = _recurrenceUnit != null;
     String recurrenceText = 'no repeat';
     if (isRecurrenceEnabled) {
-      recurrenceText = 'repeats every ${_recurrenceValue > 1 ? _recurrenceValue : ''} ${_recurrenceUnit ?? 'day'}${_recurrenceValue > 1 ? 's' : ''}';
+      recurrenceText = 'repeats every${_recurrenceValue > 1 ? ' $_recurrenceValue' : ''} ${_recurrenceUnit ?? 'day'}${_recurrenceValue > 1 ? 's' : ''}';
     }
 
     return Card(
