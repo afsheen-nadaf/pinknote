@@ -1,4 +1,4 @@
-// ignore_for_file: undefined_hidden_name, unused_import
+// ignore_for_file: undefined_hidden_name
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -37,8 +37,8 @@ class _TasksScreenState extends State<TasksScreen> with SingleTickerProviderStat
   bool _showImportantOnly = false;
   String? _selectedCategory;
   bool? _dateSortAscending; // null = no sort, true = ascending, false = descending
-  DateTime? _selectedDate; // MODIFICATION: Added for week day filter
-  DateTime _focusedDateForWeekView = DateTime.now(); // MODIFICATION: For week swiping
+  // DateTime? _selectedDate; // MODIFICATION: Added for week day filter
+  // DateTime _focusedDateForWeekView = DateTime.now(); // MODIFICATION: For week swiping
   // --- End of modification ---
 
   late final AnimationController _animationController;
@@ -192,8 +192,8 @@ class _TasksScreenState extends State<TasksScreen> with SingleTickerProviderStat
       _showImportantOnly = false;
       _selectedCategory = null;
       _dateSortAscending = null;
-      _selectedDate = null; // MODIFICATION: Clear selected date
-      _focusedDateForWeekView = DateTime.now(); // MODIFICATION: Reset week view
+      // _selectedDate = null; // MODIFICATION: Clear selected date
+      // _focusedDateForWeekView = DateTime.now(); // MODIFICATION: Reset week view
     });
   }
   // --- End of modification ---
@@ -223,14 +223,14 @@ class _TasksScreenState extends State<TasksScreen> with SingleTickerProviderStat
               filteredIncompleteTasks = filteredIncompleteTasks.where((t) => t.category == _selectedCategory).toList();
             }
             // MODIFICATION: Added filtering by selected date
-            if (_selectedDate != null) {
-              filteredIncompleteTasks = filteredIncompleteTasks.where((task) {
-              if (task.dueDate == null) return false;
-              return task.dueDate!.year == _selectedDate!.year &&
-              task.dueDate!.month == _selectedDate!.month &&
-              task.dueDate!.day == _selectedDate!.day;
-              }).toList();
-            }
+            // if (_selectedDate != null) {
+            //   filteredIncompleteTasks = filteredIncompleteTasks.where((task) {
+            //     if (task.dueDate == null) return false;
+            //     return task.dueDate!.year == _selectedDate!.year &&
+            //            task.dueDate!.month == _selectedDate!.month &&
+            //            task.dueDate!.day == _selectedDate!.day;
+            //   }).toList();
+            // }
             if (_dateSortAscending != null) {
               filteredIncompleteTasks.sort((a, b) {
                 if (a.dueDate == null && b.dueDate == null) return 0;
@@ -321,9 +321,9 @@ class _TasksScreenState extends State<TasksScreen> with SingleTickerProviderStat
                     ),
                   ),
                   // MODIFICATION: Added week view widget
-                   SliverToBoxAdapter(
-                     child: _buildWeekView(),
-                   ),
+                  // SliverToBoxAdapter(
+                  //   child: _buildWeekView(),
+                  // ),
                   SliverToBoxAdapter(
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
@@ -539,7 +539,7 @@ class _TasksScreenState extends State<TasksScreen> with SingleTickerProviderStat
   }
 
   // --- MODIFICATION: Added week view widget ---
-  
+  /*
   Widget _buildWeekView() {
     final today = DateTime.now();
     final startOfWeek = _focusedDateForWeekView.subtract(Duration(days: _focusedDateForWeekView.weekday - 1));
@@ -665,13 +665,13 @@ class _TasksScreenState extends State<TasksScreen> with SingleTickerProviderStat
       ],
     );
   }
-  
+  */
 
   // --- MODIFIED: Widget for the new filter button and menu ---
   Widget _buildFilterButton() {
     final theme = Theme.of(context);
     final isDarkMode = theme.brightness == Brightness.dark;
-    final bool isAnyFilterActive = _showImportantOnly || _selectedCategory != null || _dateSortAscending != null || _selectedDate != null;
+    final bool isAnyFilterActive = _showImportantOnly || _selectedCategory != null || _dateSortAscending != null; // || _selectedDate != null;
     final filterTextColor = isDarkMode ? Colors.white : Colors.black;
 
     return Padding(
@@ -716,20 +716,20 @@ class _TasksScreenState extends State<TasksScreen> with SingleTickerProviderStat
               }
             },
             itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-              const PopupMenuItem<String>(
+              PopupMenuItem<String>(
                 value: 'important',
                 child: Row(
-                  children: [
+                  children: const [
                     Icon(Icons.star_rounded, color: AppColors.accentYellow, size: 20),
                     SizedBox(width: 12),
                     Text('important'),
                   ],
                 ),
               ),
-              const PopupMenuItem<String>(
+              PopupMenuItem<String>(
                 value: 'category',
                 child: Row(
-                  children: [
+                  children: const [
                     Icon(Icons.folder_rounded, color: AppColors.primaryPink, size: 20),
                     SizedBox(width: 12),
                     Text('category'),
