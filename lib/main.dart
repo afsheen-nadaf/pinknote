@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:home_widget/home_widget.dart'; // Added for widget interaction
 
 import 'package:pinknote/screens/home_screen.dart';
 import 'package:pinknote/screens/tasks_screen.dart';
@@ -18,9 +19,10 @@ import 'package:pinknote/screens/mood_tracker_screen.dart';
 import 'package:pinknote/screens/initial_onboarding_screen.dart';
 import 'package:pinknote/screens/welcome_screen.dart';
 import 'package:pinknote/screens/verify_email_screen.dart';
-import 'package:pinknote/screens/loading_screen.dart'; // Import the LoadingScreen
+import 'package:pinknote/screens/loading_screen.dart';
 
 import 'package:pinknote/services/services.dart';
+import 'package:pinknote/services/widget_service.dart'; // Added for resetting widget
 import 'package:pinknote/utils/app_constants.dart';
 import 'package:pinknote/models/category.dart';
 import 'package:pinknote/models/event.dart';
@@ -32,8 +34,6 @@ final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // REMOVED: Do not request permissions in main(). This can cause startup issues on iOS.
-  // await Permission.notification.request();
   runApp(const MyApp());
 }
 
@@ -44,7 +44,7 @@ class MyApp extends StatefulWidget {
   State<MyApp> createState() => _MyAppState();
 }
 
-class _MyAppState extends State<MyApp> {
+class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   bool _isLoading = true;
   bool _hasCompletedInitialOnboarding = false;
   late FirestoreService _firestoreService;
@@ -52,7 +52,24 @@ class _MyAppState extends State<MyApp> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this); // Observe lifecycle changes
     _initializeApp();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this); // Clean up observer
+    super.dispose();
+  }
+
+  // Handle App Lifecycle changes (Pause/Close)
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    // Modified: Only reset when the app is fully detached (closed/terminated).
+    if (state == AppLifecycleState.detached) {
+      WidgetService.resetPomodoroWidget();
+    }
   }
 
   Future<void> _initializeApp() async {
@@ -67,10 +84,7 @@ class _MyAppState extends State<MyApp> {
       _firestoreService = FirestoreService("pinknote_app");
       debugPrint("FirestoreService initialized");
 
-      // MOVED: Request notification permission here.
-      // It's better to ask for permission here than in main(), but ideally,
-      // this should be triggered by a user action, e.g., a button in settings.
-      // We check if the user has already denied the permission before requesting.
+      // Request notification permission here.
       if (await Permission.notification.isDenied) {
           await Permission.notification.request();
       }
@@ -105,7 +119,6 @@ class _MyAppState extends State<MyApp> {
 
     } catch (e) {
       debugPrint("App initialization error: $e");
-      // Handle initialization errors (e.g., show an error message)
     } finally {
       if (mounted) {
         setState(() {
@@ -495,7 +508,28 @@ class _MainAppScreenState extends State<MainAppScreen> with TickerProviderStateM
 
     _listenToCategories();
     _listenToEvents();
+
+    // REQUIREMENT: Check for widget interaction on launch and while running
+    _checkForWidgetLaunch();
   }
+
+  // --- Widget Interaction Logic ---
+  void _checkForWidgetLaunch() {
+    // 1. Handle app launch from widget (Cold start)
+    HomeWidget.initiallyLaunchedFromHomeWidget().then(_handleWidgetLaunch);
+    // 2. Handle widget clicks while app is in background/foreground
+    HomeWidget.widgetClicked.listen(_handleWidgetLaunch);
+  }
+
+  void _handleWidgetLaunch(Uri? uri) {
+    // REQUIREMENT: Redirect to Pomodoro screen (index 3) when widget is clicked
+    if (uri != null && uri.host == 'pomodoro') {
+      setState(() {
+        _selectedIndex = 3; // Switch to Pomodoro tab
+      });
+    }
+  }
+  // ------------------------------
 
   @override
   void didUpdateWidget(covariant MainAppScreen oldWidget) {
@@ -610,7 +644,6 @@ class _MainAppScreenState extends State<MainAppScreen> with TickerProviderStateM
             ),
             backgroundColor: Colors.transparent,
             elevation: 0,
-            shadowColor: Colors.transparent,
             centerTitle: true,
             actions: [
               IconButton(
@@ -618,8 +651,8 @@ class _MainAppScreenState extends State<MainAppScreen> with TickerProviderStateM
                 onPressed: () {
                   Navigator.push(
                     context,
-                  MaterialPageRoute(
-                    builder: (context) => SettingsScreen(firestoreService: widget.firestoreService),
+                    MaterialPageRoute(
+                      builder: (context) => SettingsScreen(firestoreService: widget.firestoreService),
                     ),
                   );
                 },
@@ -647,8 +680,7 @@ class _MainAppScreenState extends State<MainAppScreen> with TickerProviderStateM
             ),
           ),
         ),
-        bottomNavigationBar:
-            BottomNavigationBar(
+        bottomNavigationBar: BottomNavigationBar(
           items: [
             _buildNavItem(Icons.home_rounded, 'home', 0),
             _buildNavItem(Icons.task_alt_rounded, 'tasks', 1),
@@ -670,8 +702,6 @@ class _MainAppScreenState extends State<MainAppScreen> with TickerProviderStateM
             letterSpacing: 0.5,
           ),
           elevation: 0,
-          selectedFontSize: 12,
-          unselectedFontSize: 10,
         ),
       ),
     );
@@ -686,17 +716,13 @@ class _MainAppScreenState extends State<MainAppScreen> with TickerProviderStateM
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: isSelected
-              ? AppColors.primaryPink.withOpacity(0.1)
-              : Colors.transparent,
+          color: isSelected ? AppColors.primaryPink.withOpacity(0.1) : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
         ),
         child: Icon(
           icon,
           size: isSelected ? 26 : 24,
-          color: isSelected
-              ? AppColors.primaryPink
-              : theme.bottomNavigationBarTheme.unselectedItemColor,
+          color: isSelected ? AppColors.primaryPink : (theme.brightness == Brightness.dark ? Colors.white : Colors.black),
         ),
       ),
       label: label,

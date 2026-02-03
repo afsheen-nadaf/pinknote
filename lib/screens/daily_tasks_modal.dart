@@ -123,7 +123,7 @@ class _DailyRoutinesModalState extends State<DailyRoutinesModal> {
               children: [
                 _buildTableHeader(theme, weekDays),
                 const SizedBox(height: 8),
-                ...routines.map((routine) => _buildRoutineRow(theme, routine, entries, weekDays)).toList(),
+                ...routines.map((routine) => _buildRoutineRow(theme, routine, entries, weekDays)),
               ],
             );
           },

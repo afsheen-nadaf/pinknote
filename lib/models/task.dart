@@ -218,4 +218,8 @@ class Task {
 
   // Helper to get Color object from int value
   Color get color => Color(colorValue);
+
+  get date => null;
+
+  get time => null;
 }

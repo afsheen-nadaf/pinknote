@@ -5,7 +5,8 @@ import 'dart:async'; // For Timer
 import 'package:google_fonts/google_fonts.dart'; // Import Google Fonts
 import 'package:audioplayers/audioplayers.dart'; // For audio playback
 import '../utils/app_constants.dart';
-import '../services/services.dart'; // Import services to use SoundService
+import '../services/services.dart';
+import '../services/widget_service.dart'; // *** IMPORTED WIDGET SERVICE ***
 
 class PomodoroScreen extends StatelessWidget {
   const PomodoroScreen({super.key});
@@ -14,17 +15,14 @@ class PomodoroScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return const Scaffold(
-      backgroundColor: Colors.transparent, // Let the main app screen handle the background
+      backgroundColor: Colors.transparent, 
       body: Column(
-        // mainAxisAlignment is removed to allow Spacers to control vertical positioning
         children: [
-          //SizedBox(height: 10), // Increased top padding
-          Spacer(), // This spacer will push the PomodoroTimerWidget down
-          Center( // Centers the timer widget horizontally
+          Spacer(), 
+          Center( 
             child: PomodoroTimerWidget(),
           ),
-          //SizedBox(height: 40), // Increased bottom padding
-          Spacer(), // This spacer will ensure the timer is vertically centered in the remaining space
+          Spacer(),
         ],
       ),
     );
@@ -90,7 +88,6 @@ class _PomodoroTimerWidgetState extends State<PomodoroTimerWidget>
     _pulseController.dispose();
     _focusPlayer.dispose();
     _breakPlayer.dispose();
-    // Ensure to cancel running notification when the widget is disposed
     notificationService.cancelRunningPomodoroNotification();
     super.dispose();
   }
@@ -181,7 +178,6 @@ class _PomodoroTimerWidgetState extends State<PomodoroTimerWidget>
       _currentState = PomodoroState.working;
       _currentSeconds = _workDuration;
     } else if (_currentState == PomodoroState.paused) {
-      // This is a simplification. A better approach would store the pre-pause state.
       if (_currentSeconds > _shortBreakDuration && _currentSeconds <= _workDuration) {
           _currentState = PomodoroState.working;
       } else if (_pomodoroCount > 0 && _pomodoroCount % 4 == 0) {
@@ -194,11 +190,17 @@ class _PomodoroTimerWidgetState extends State<PomodoroTimerWidget>
     _pulseController.repeat(reverse: true);
     _playMusic();
     
-    // **FIXED**: Changed to use the correct named arguments and lowercase.
     notificationService.showRunningPomodoroNotification(
       title: 'pomodoro timer running',
       body: 'currently in ${_getCurrentStateLabel()} session. time remaining: ${_formatTime(_currentSeconds)}',
       context: context,
+    );
+    
+    // *** WIDGET UPDATE ***
+    WidgetService.updatePomodoroWidget(
+      status: _getCurrentStateLabel(), 
+      secondsRemaining: _currentSeconds, 
+      isRunning: true
     );
 
     _timer?.cancel();
@@ -207,12 +209,21 @@ class _PomodoroTimerWidgetState extends State<PomodoroTimerWidget>
         setState(() {
           _currentSeconds--;
         });
-        // **FIXED**: Changed to use the correct named arguments and lowercase.
+        
+        // Only update notification/widget periodically to save battery, but for now 1s is fine for accuracy
         notificationService.showRunningPomodoroNotification(
           title: 'pomodoro timer running',
           body: 'currently in ${_getCurrentStateLabel()} session. time remaining: ${_formatTime(_currentSeconds)}',
           context: context,
         );
+        
+        // *** WIDGET UPDATE ***
+        WidgetService.updatePomodoroWidget(
+          status: _getCurrentStateLabel(), 
+          secondsRemaining: _currentSeconds, 
+          isRunning: true
+        );
+
       } else {
         _timer?.cancel();
         _pulseController.stop();
@@ -229,8 +240,14 @@ class _PomodoroTimerWidgetState extends State<PomodoroTimerWidget>
       setState(() {
         _currentState = PomodoroState.paused;
       });
-      // Cancel persistent notification when paused
       notificationService.cancelRunningPomodoroNotification();
+
+      // *** WIDGET UPDATE ***
+      WidgetService.updatePomodoroWidget(
+        status: "Paused", 
+        secondsRemaining: _currentSeconds, 
+        isRunning: false
+      );
     }
   }
 
@@ -243,21 +260,24 @@ class _PomodoroTimerWidgetState extends State<PomodoroTimerWidget>
       _currentState = PomodoroState.stopped;
       _pomodoroCount = 0;
     });
-    // Cancel persistent notification when reset
     notificationService.cancelRunningPomodoroNotification();
+
+    // *** WIDGET UPDATE ***
+    WidgetService.updatePomodoroWidget(
+      status: "Ready to Focus", 
+      secondsRemaining: _workDuration, 
+      isRunning: false
+    );
   }
 
   void _moveToNextState() {
     _stopMusic();
-    // Cancel persistent notification before moving to next state
     notificationService.cancelRunningPomodoroNotification();
 
     setState(() {
       if (_currentState == PomodoroState.working) {
         _pomodoroCount++;
-        // Play session complete sound only when a working session is finished
         soundService.playPomodoroSessionCompleteSound();
-        // Show completion notification
         notificationService.showPomodoroCompletionNotification(
           'pomodoro session complete!',
           'you completed a ${_workDuration ~/ 60}-minute focus session. take a break, you deserve it <3',
@@ -271,11 +291,10 @@ class _PomodoroTimerWidgetState extends State<PomodoroTimerWidget>
           _currentSeconds = _shortBreakDuration;
         }
       } else {
-        // If skipping from a break state, do not play the session complete sound
         _currentState = PomodoroState.working;
         _currentSeconds = _workDuration;
       }
-      _startTimer(); // Automatically start the next session/break
+      _startTimer();
     });
   }
 
@@ -311,7 +330,6 @@ class _PomodoroTimerWidgetState extends State<PomodoroTimerWidget>
     return Container(
       margin: const EdgeInsets.all(16.0),
       child: Card(
-        // UPDATED: Use theme card color
         color: theme.cardColor,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20.0),
@@ -333,15 +351,15 @@ class _PomodoroTimerWidgetState extends State<PomodoroTimerWidget>
                   letterSpacing: 0.5,
                 ),
               ),
-              const SizedBox(height: 30), // Increased spacing
+              const SizedBox(height: 30),
               AnimatedBuilder(
                 animation: _pulseAnimation,
                 builder: (context, child) {
                   return Transform.scale(
                     scale: isRunning ? _pulseAnimation.value : 1.0,
                     child: Container(
-                      width: 220, // Increased size
-                      height: 220, // Increased size
+                      width: 220,
+                      height: 220,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         gradient: RadialGradient(
@@ -355,8 +373,8 @@ class _PomodoroTimerWidgetState extends State<PomodoroTimerWidget>
                         alignment: Alignment.center,
                         children: [
                           SizedBox(
-                            width: 200, // Increased size
-                            height: 200, // Increased size
+                            width: 200,
+                            height: 200,
                             child: CircularProgressIndicator(
                               value: _progress,
                               strokeWidth: 8,
@@ -369,7 +387,7 @@ class _PomodoroTimerWidgetState extends State<PomodoroTimerWidget>
                             children: [
                               Text(
                                 _formatTime(_currentSeconds),
-                                style: GoogleFonts.poppins(fontSize: 48, fontWeight: FontWeight.w300, color: color), // Increased font size
+                                style: GoogleFonts.poppins(fontSize: 48, fontWeight: FontWeight.w300, color: color),
                               ),
                               const SizedBox(height: 8),
                               Icon(_getCurrentStateIcon(), color: color.withOpacity(0.8), size: 24),
@@ -381,7 +399,7 @@ class _PomodoroTimerWidgetState extends State<PomodoroTimerWidget>
                   );
                 },
               ),
-              const SizedBox(height: 40), // Increased spacing
+              const SizedBox(height: 40),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
@@ -413,7 +431,6 @@ class _PomodoroTimerWidgetState extends State<PomodoroTimerWidget>
                     child: ElevatedButton(
                        onPressed: _toggleMute,
                        style: ElevatedButton.styleFrom(
-                          // UPDATED: Use theme color
                           backgroundColor: theme.colorScheme.secondaryContainer,
                           foregroundColor: theme.colorScheme.onSecondaryContainer,
                           shape: const CircleBorder(),
@@ -426,14 +443,13 @@ class _PomodoroTimerWidgetState extends State<PomodoroTimerWidget>
                   ),
                 ],
               ),
-              const SizedBox(height: 20), // Increased spacing
+              const SizedBox(height: 20),
               Row(
                 children: [
                    Expanded(
                     child: ElevatedButton(
                       onPressed: _resetTimer,
                       style: ElevatedButton.styleFrom(
-                        // UPDATED: Use theme color
                         backgroundColor: theme.colorScheme.secondaryContainer,
                         foregroundColor: theme.colorScheme.onSecondaryContainer,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
@@ -475,11 +491,10 @@ class _PomodoroTimerWidgetState extends State<PomodoroTimerWidget>
                   ),
                 ],
               ),
-              const SizedBox(height: 30), // Increased spacing
+              const SizedBox(height: 30),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                 decoration: BoxDecoration(
-                  // UPDATED: Use theme color
                   color: theme.cardColor.withOpacity(0.7),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: AppColors.borderLight.withOpacity(0.3)),

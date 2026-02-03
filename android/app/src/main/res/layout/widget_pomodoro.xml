@@ -1,0 +1,43 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/pomodoro_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/rounded_pink_bg"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:padding="16dp">
+
+    <!-- 
+      fontFamily="sans-serif-medium" provides that geometric, 
+      Poppins-like thickness.
+      letterSpacing="0.02" adds a bit of breathability common in modern design.
+    -->
+
+    <TextView
+        android:id="@+id/pomo_status"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="focus"
+        android:textColor="@android:color/white"
+        android:textSize="16sp"
+        android:alpha="0.95"
+        android:fontFamily="sans-serif-medium"
+        android:letterSpacing="0.02"
+        android:textAllCaps="false"
+        tools:text="focus" />
+
+    <TextView
+        android:id="@+id/pomo_timer"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="25:00"
+        android:textColor="@android:color/white"
+        android:textSize="36sp"
+        android:fontFamily="sans-serif-medium"
+        android:layout_marginTop="2dp"
+        android:layout_marginBottom="4dp"
+        android:includeFontPadding="false"
+        tools:text="25:00"/>
+
+</LinearLayout>

@@ -421,23 +421,27 @@ class NotificationService {
     final String name = (userName.isNotEmpty) ? userName.toLowerCase() : 'friend';
 
     await _notificationsPlugin.zonedSchedule(
-        _birthdayNotificationId,
-        'happy birthday, $name! 🎉🎂',
-        'wishing you a fantastic day filled with joy and laughter!',
-        _nextBirthday(birthDate),
-        const NotificationDetails(
-            android: AndroidNotificationDetails(
-                'birthday_channel',
-                'birthdays',
-                channelDescription: 'get a special message on your birthday.',
-                importance: Importance.max,
-                priority: Priority.high,
-            ),
-            iOS: DarwinNotificationDetails(presentAlert: true, presentBadge: true, presentSound: true),
+      _birthdayNotificationId,
+      'happy birthday, $name! 🎉🎂',
+      'wishing you a fantastic day filled with joy and laughter!',
+      _nextBirthday(birthDate),
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          'birthday_channel',
+          'birthdays',
+          channelDescription: 'get a special message on your birthday.',
+          importance: Importance.max,
+          priority: Priority.high,
         ),
-        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-        matchDateTimeComponents: DateTimeComponents.dayOfMonthAndTime,
+        iOS: DarwinNotificationDetails(
+          presentAlert: true,
+          presentBadge: true,
+          presentSound: true,
+        ),
+      ),
+      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
     );
+
     debugPrint("Birthday notification scheduled for ${birthDate.month}/${birthDate.day} at 9:00 AM.");
   }
 

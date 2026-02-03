@@ -1,13 +1,14 @@
+// ignore_for_file: library_private_types_in_public_api
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
-import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 import '../models/routine.dart';
 import '../models/routine_entry.dart';
 import '../services/firestore_service.dart';
 import '../utils/app_constants.dart'; // Assuming AppColors are here
-import '../theme_mode_notifier.dart'; // To check theme
+// To check theme
 
 class DailyRoutinesModal extends StatefulWidget {
   final FirestoreService firestoreService;
@@ -133,7 +134,7 @@ class _DailyRoutinesModalState extends State<DailyRoutinesModal> {
               children: [
                 _buildTableHeader(context, weekDays, primaryTextColor),
                 const SizedBox(height: 8),
-                ...routines.map((routine) => _buildRoutineRow(context, routine, entries, weekDays, primaryTextColor)).toList(),
+                ...routines.map((routine) => _buildRoutineRow(context, routine, entries, weekDays, primaryTextColor)),
               ],
             );
           },
@@ -143,7 +144,7 @@ class _DailyRoutinesModalState extends State<DailyRoutinesModal> {
   }
 
   Widget _buildTableHeader(BuildContext context, List<DateTime> weekDays, Color primaryTextColor) {
-    final dayHeaderStyle = TextStyle(fontWeight: FontWeight.bold, color: AppColors.primaryPink);
+    const dayHeaderStyle = TextStyle(fontWeight: FontWeight.bold, color: AppColors.primaryPink);
     final routineHeaderStyle = TextStyle(fontWeight: FontWeight.bold, color: primaryTextColor.withOpacity(0.8));
     
     return Row(
@@ -154,7 +155,7 @@ class _DailyRoutinesModalState extends State<DailyRoutinesModal> {
           flex: 1,
           child: Center(child: Text(DateFormat.E(null).format(day).substring(0,1).toLowerCase(), style: dayHeaderStyle)),
         )),
-        Expanded(flex: 2, child: SizedBox()), // For streak icon
+        const Expanded(flex: 2, child: SizedBox()), // For streak icon
       ],
     );
   }

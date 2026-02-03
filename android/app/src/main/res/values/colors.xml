@@ -1,4 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Existing Colors -->
     <color name="ic_launcher_background">#F8F0F0</color>
+    <color name="cream_bg">#FFF8E1</color>
+    <color name="text_dark">#212121</color>
+    <color name="text_light">#757575</color>
+    <color name="white">#FFFFFF</color>
+
+    <!-- Updated Palette for Categories -->
+    <color name="bg_focus_pink">#FF8FAB</color>
+    <color name="bg_recharge_blue">#81D4FA</color>
+    <color name="bg_stretch_green">#A5D6A7</color>
+    
+    <!-- New Grey for Paused State -->
+    <color name="bg_paused_grey">#B0BEC5</color>
 </resources>
