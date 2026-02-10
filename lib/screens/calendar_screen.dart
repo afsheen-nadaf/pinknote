@@ -302,7 +302,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30.0)),
         elevation: 10.0,
         label: Text(
-          'new event',
+          'add event',
           style: theme.textTheme.labelLarge?.copyWith(color: isDarkMode ? Colors.black : Colors.white),
         ),
         icon: Icon(Icons.event_rounded, color: isDarkMode ? Colors.black : Colors.white, size: 24),

@@ -531,7 +531,7 @@ class _TasksScreenState extends State<TasksScreen> with SingleTickerProviderStat
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30.0)),
         elevation: 10.0,
         label: Text(
-          'add new task',
+          'add task',
           style: theme.textTheme.labelLarge?.copyWith(color: isDarkMode ? Colors.black : Colors.white),
         ),
         icon: Icon(Icons.add_task_rounded, color: isDarkMode ? Colors.black : Colors.white, size: 24),

@@ -244,7 +244,7 @@ class _NotesScreenState extends State<NotesScreen> {
           'add note',
           style: theme.textTheme.labelLarge?.copyWith(color: isDarkMode ? Colors.black : Colors.white),
         ),
-        icon: Icon(Icons.add_rounded, color: isDarkMode ? Colors.black : Colors.white, size: 24),
+        icon: Icon(Icons.edit_note_rounded, color: isDarkMode ? Colors.black : Colors.white, size: 24),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
     );
