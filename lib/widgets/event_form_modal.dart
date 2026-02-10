@@ -546,6 +546,9 @@ class _EventFormModalState extends State<EventFormModal> {
             isScrollControlled: true,
             backgroundColor: Colors.transparent,
             builder: (context) => CategoryFormModal(
+              existingCategories: widget.availableCategories,
+              firestoreService: widget.firestoreService,
+              currentCategories: widget.availableCategories,
               onSave: (newCategory) {
                 widget.onAddCategory(newCategory);
                 setState(() => _selectedCategoryName = newCategory.name);
@@ -627,6 +630,9 @@ class _EventFormModalState extends State<EventFormModal> {
                 backgroundColor: Colors.transparent,
                 builder: (context) => CategoryFormModal(
                   category: category,
+                  existingCategories: widget.availableCategories,
+                  firestoreService: widget.firestoreService,
+                  currentCategories: widget.availableCategories,
                   onSave: (updatedCategory) {
                     widget.onUpdateCategory(updatedCategory);
                     if (_selectedCategoryName == category.name) {
@@ -653,9 +659,11 @@ class _EventFormModalState extends State<EventFormModal> {
 
   void _confirmDeleteCategory(Category category) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
+        backgroundColor: isDark ? AppColors.darkSurface : AppColors.softCream,
         title: Text('delete category?', style: theme.textTheme.titleMedium),
         content: Text('tasks in "${category.name}" will be moved to "general".', style: theme.textTheme.bodyMedium),
         actions: [

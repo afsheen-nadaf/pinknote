@@ -7,7 +7,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:home_widget/home_widget.dart'; // Added for widget interaction
+import 'package:home_widget/home_widget.dart'; 
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_quill/flutter_quill.dart'; 
+import 'package:flutter_quill/translations.dart'; // Required for FlutterQuillLocalizations
 
 import 'package:pinknote/screens/home_screen.dart';
 import 'package:pinknote/screens/tasks_screen.dart';
@@ -20,9 +23,10 @@ import 'package:pinknote/screens/initial_onboarding_screen.dart';
 import 'package:pinknote/screens/welcome_screen.dart';
 import 'package:pinknote/screens/verify_email_screen.dart';
 import 'package:pinknote/screens/loading_screen.dart';
+import 'package:pinknote/screens/notes_screen.dart'; 
 
 import 'package:pinknote/services/services.dart';
-import 'package:pinknote/services/widget_service.dart'; // Added for resetting widget
+import 'package:pinknote/services/widget_service.dart'; 
 import 'package:pinknote/utils/app_constants.dart';
 import 'package:pinknote/models/category.dart';
 import 'package:pinknote/models/event.dart';
@@ -52,21 +56,19 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this); // Observe lifecycle changes
+    WidgetsBinding.instance.addObserver(this); 
     _initializeApp();
   }
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this); // Clean up observer
+    WidgetsBinding.instance.removeObserver(this); 
     super.dispose();
   }
 
-  // Handle App Lifecycle changes (Pause/Close)
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
-    // Modified: Only reset when the app is fully detached (closed/terminated).
     if (state == AppLifecycleState.detached) {
       WidgetService.resetPomodoroWidget();
     }
@@ -74,47 +76,28 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
   Future<void> _initializeApp() async {
     try {
-      // 1. Initialize Firebase
       await Firebase.initializeApp(
         options: DefaultFirebaseOptions.currentPlatform,
       );
-      debugPrint("Firebase initialized");
-
-      // Initialize FirestoreService AFTER Firebase is initialized
       _firestoreService = FirestoreService("pinknote_app");
-      debugPrint("FirestoreService initialized");
 
-      // Request notification permission here.
       if (await Permission.notification.isDenied) {
           await Permission.notification.request();
       }
 
-      // 2. Load SharedPreferences
       final prefs = await SharedPreferences.getInstance();
       _hasCompletedInitialOnboarding = prefs.getBool('has_completed_initial_onboarding') ?? false;
-      debugPrint('hasCompletedInitialOnboarding: $_hasCompletedInitialOnboarding');
 
-      // 3. Initialize Notification Service
       await notificationService.init().timeout(const Duration(seconds: 5));
-      debugPrint("Notification service initialized");
       notificationService.setNavigatorKey(navigatorKey);
 
-      // Check if notifications are enabled before scheduling
       final status = await Permission.notification.status;
       if (status.isGranted) {
         await notificationService.scheduleDailyGoodMorningNotification(context).timeout(const Duration(seconds: 5));
-        debugPrint("Scheduled good morning notification");
         await notificationService.scheduleDailyMoodReminderNotification(context).timeout(const Duration(seconds: 5));
-        debugPrint("Scheduled daily mood reminder");
-      } else {
-        debugPrint("Notifications are not granted. Skipping daily notification scheduling.");
       }
 
-      // 4. Load Sound Preference
       await soundService.loadSoundPreference().timeout(const Duration(seconds: 5));
-      debugPrint("Sound prefs loaded");
-
-      // Simulate a minimum loading time to ensure the loading screen is visible
       await Future.delayed(const Duration(seconds: 2));
 
     } catch (e) {
@@ -152,6 +135,16 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             debugShowCheckedModeBanner: false,
             navigatorKey: navigatorKey,
             themeMode: currentThemeMode,
+            // UPDATED: Standard app-level localization including FlutterQuill
+            localizationsDelegates: const [
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+              FlutterQuillLocalizations.delegate, // Added this delegate
+            ],
+            supportedLocales: const [
+              Locale('en'),
+            ],
             theme: ThemeData(
               primarySwatch: Colors.pink,
               scaffoldBackgroundColor: AppColors.lightPeach,
@@ -358,7 +351,6 @@ class _AuthFlowHandlerState extends State<AuthFlowHandler> {
     FirebaseAuth.instance.authStateChanges().listen((User? user) {
       if (user != null) {
         widget.firestoreService.setUserId(user.uid);
-        debugPrint('FirestoreService userId set to: ${user.uid}');
       }
       if (mounted) {
         setState(() {});
@@ -410,7 +402,6 @@ class _AuthFlowHandlerState extends State<AuthFlowHandler> {
         }
 
         if (!_hasCompletedInitialOnboarding) {
-          debugPrint('Navigating to InitialOnboardingScreen');
           return InitialOnboardingScreen(
             firestoreService: widget.firestoreService,
             onOnboardingComplete: () async {
@@ -429,10 +420,8 @@ class _AuthFlowHandlerState extends State<AuthFlowHandler> {
 
         if (user != null) {
           if (user.emailVerified) {
-            debugPrint('Email verified user authenticated. Navigating to MainAppScreen.');
             return MainAppScreen(firestoreService: widget.firestoreService);
           } else {
-            debugPrint('User not verified. Navigating to VerifyEmailScreen.');
             return VerifyEmailScreen(
               onVerified: () {
                 setState(() {});
@@ -441,12 +430,10 @@ class _AuthFlowHandlerState extends State<AuthFlowHandler> {
           }
         }
         else {
-          debugPrint('No user authenticated. Navigating to WelcomeScreen.');
           return WelcomeScreen(
             firestoreService: widget.firestoreService,
             showEmailVerificationPrompt: false,
             onOnboardingComplete: () {
-              debugPrint('Auth flow complete. Navigating to MainAppScreen.');
               Navigator.of(context).pushReplacementNamed(
                 '/home',
                 arguments: {'initialIndex': 0},
@@ -458,7 +445,6 @@ class _AuthFlowHandlerState extends State<AuthFlowHandler> {
     );
   }
 }
-
 
 class MainAppScreen extends StatefulWidget {
   final FirestoreService firestoreService;
@@ -478,10 +464,12 @@ class _MainAppScreenState extends State<MainAppScreen> with TickerProviderStateM
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
 
+  // UPDATED ORDER: Notes moved to index 3
   final List<String> _pageTitles = const [
     'pinknote',
     'tasks',
     'calendar',
+    'notes', // Index 3
     'pomodoro timer',
     'mood tracker',
   ];
@@ -509,27 +497,21 @@ class _MainAppScreenState extends State<MainAppScreen> with TickerProviderStateM
     _listenToCategories();
     _listenToEvents();
 
-    // REQUIREMENT: Check for widget interaction on launch and while running
     _checkForWidgetLaunch();
   }
 
-  // --- Widget Interaction Logic ---
   void _checkForWidgetLaunch() {
-    // 1. Handle app launch from widget (Cold start)
     HomeWidget.initiallyLaunchedFromHomeWidget().then(_handleWidgetLaunch);
-    // 2. Handle widget clicks while app is in background/foreground
     HomeWidget.widgetClicked.listen(_handleWidgetLaunch);
   }
 
   void _handleWidgetLaunch(Uri? uri) {
-    // REQUIREMENT: Redirect to Pomodoro screen (index 3) when widget is clicked
     if (uri != null && uri.host == 'pomodoro') {
       setState(() {
-        _selectedIndex = 3; // Switch to Pomodoro tab
+        _selectedIndex = 4; // Pomodoro is now at index 4
       });
     }
   }
-  // ------------------------------
 
   @override
   void didUpdateWidget(covariant MainAppScreen oldWidget) {
@@ -586,6 +568,7 @@ class _MainAppScreenState extends State<MainAppScreen> with TickerProviderStateM
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     final theme = Theme.of(context);
 
+    // UPDATED ORDER: NotesScreen at index 3
     final List<Widget> screens = [
       HomeScreen(firestoreService: widget.firestoreService),
       TasksScreen(
@@ -605,6 +588,10 @@ class _MainAppScreenState extends State<MainAppScreen> with TickerProviderStateM
         onAddCategory: widget.firestoreService.addCategory,
         onUpdateCategory: widget.firestoreService.updateCategory,
         onDeleteCategory: widget.firestoreService.deleteCategory,
+      ),
+      NotesScreen( // Index 3
+        firestoreService: widget.firestoreService,
+        availableCategories: _availableCategories,
       ),
       const PomodoroScreen(),
       MoodTrackerScreen(firestoreService: widget.firestoreService),
@@ -685,8 +672,9 @@ class _MainAppScreenState extends State<MainAppScreen> with TickerProviderStateM
             _buildNavItem(Icons.home_rounded, 'home', 0),
             _buildNavItem(Icons.task_alt_rounded, 'tasks', 1),
             _buildNavItem(Icons.calendar_today_rounded, 'calendar', 2),
-            _buildNavItem(Icons.timer_rounded, 'pomodoro', 3),
-            _buildNavItem(Icons.sentiment_satisfied_alt_rounded, 'mood', 4),
+            _buildNavItem(Icons.description, 'notes', 3), // Index 3
+            _buildNavItem(Icons.timer_rounded, 'pomodoro', 4),
+            _buildNavItem(Icons.sentiment_satisfied_alt_rounded, 'mood', 5),
           ],
           currentIndex: _selectedIndex,
           onTap: _onItemTapped,

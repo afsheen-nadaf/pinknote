@@ -5,9 +5,15 @@ import '../utils/app_constants.dart';
 
 class CategoryFormModal extends StatefulWidget {
   final Category? category; // Null for new, Category object for editing
+  final List<Category> existingCategories; // Needed to check for duplicates
   final Function(Category) onSave;
 
-  const CategoryFormModal({super.key, this.category, required this.onSave});
+  const CategoryFormModal({
+    super.key,
+    this.category,
+    required this.existingCategories,
+    required this.onSave, required FirestoreService firestoreService, required List<Category> currentCategories,
+  });
 
   @override
   State<CategoryFormModal> createState() => _CategoryFormModalState();
@@ -33,14 +39,17 @@ class _CategoryFormModalState extends State<CategoryFormModal> {
 
   void _saveCategory() {
     if (_formKey.currentState!.validate()) {
+      // Play sound only for new categories
       if (widget.category == null) {
         soundService.playAddTaskSound();
       }
+
       final savedCategory = Category(
         id: widget.category?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
         name: _nameController.text.trim(),
         colorValue: _selectedColor.value,
       );
+
       widget.onSave(savedCategory);
       Navigator.of(context).pop();
     }
@@ -50,12 +59,14 @@ class _CategoryFormModalState extends State<CategoryFormModal> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    // Consistent UI with SubtaskFormModal
     return Container(
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-        border: Border.all(color: theme.colorScheme.outline.withOpacity(0.5), width: 1.0),
+        border: Border.all(
+          color: theme.colorScheme.outline.withOpacity(0.5),
+          width: 1.0,
+        ),
       ),
       child: Padding(
         padding: EdgeInsets.only(
@@ -80,6 +91,7 @@ class _CategoryFormModalState extends State<CategoryFormModal> {
               key: _formKey,
               child: TextFormField(
                 controller: _nameController,
+                textCapitalization: TextCapitalization.none,
                 decoration: InputDecoration(
                   labelText: 'category name',
                   hintText: 'e.g., work, personal, home',
@@ -92,6 +104,10 @@ class _CategoryFormModalState extends State<CategoryFormModal> {
                     borderRadius: BorderRadius.circular(15),
                     borderSide: const BorderSide(color: AppColors.primaryPink, width: 1.5),
                   ),
+                  errorBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(15),
+                    borderSide: const BorderSide(color: Colors.redAccent, width: 1.0),
+                  ),
                   prefixIcon: const Icon(Icons.category_rounded, color: AppColors.primaryPink),
                   filled: true,
                   fillColor: theme.colorScheme.surface,
@@ -100,6 +116,19 @@ class _CategoryFormModalState extends State<CategoryFormModal> {
                   if (value == null || value.trim().isEmpty) {
                     return 'category name cannot be empty';
                   }
+                  
+                  final inputName = value.trim().toLowerCase();
+                  
+                  // Check if the name already exists in the list
+                  // We ignore the check if the name belongs to the category we are currently editing
+                  final isDuplicate = widget.existingCategories.any((cat) => 
+                    cat.name.toLowerCase() == inputName && cat.id != widget.category?.id
+                  );
+
+                  if (isDuplicate) {
+                    return "'$inputName' already exists. try a different name";
+                  }
+
                   return null;
                 },
                 style: theme.textTheme.bodyLarge,
@@ -145,12 +174,10 @@ class _CategoryFormModalState extends State<CategoryFormModal> {
               }).toList(),
             ),
             const SizedBox(height: 32),
-            // Consistent button layout
             Row(
               children: [
                 TextButton(
                   onPressed: () => Navigator.of(context).pop(),
-                  // Changed color to be non-destructive
                   child: Text('cancel', style: theme.textTheme.labelLarge),
                 ),
                 const Spacer(),

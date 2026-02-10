@@ -72,6 +72,7 @@ class _TasksScreenState extends State<TasksScreen> with SingleTickerProviderStat
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) => TaskFormModal(
+        firestoreService: widget.firestoreService,
         task: task,
         onSave: (updatedTask) {
           if (task == null) {
@@ -524,6 +525,7 @@ class _TasksScreenState extends State<TasksScreen> with SingleTickerProviderStat
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'tasks_fab_main', // Unique Tag to prevent conflicts
         onPressed: () => _showTaskFormModal(),
         backgroundColor: AppColors.primaryPink,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30.0)),
@@ -716,20 +718,20 @@ class _TasksScreenState extends State<TasksScreen> with SingleTickerProviderStat
               }
             },
             itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-              PopupMenuItem<String>(
+              const PopupMenuItem<String>(
                 value: 'important',
                 child: Row(
-                  children: const [
+                  children: [
                     Icon(Icons.star_rounded, color: AppColors.accentYellow, size: 20),
                     SizedBox(width: 12),
                     Text('important'),
                   ],
                 ),
               ),
-              PopupMenuItem<String>(
+              const PopupMenuItem<String>(
                 value: 'category',
                 child: Row(
-                  children: const [
+                  children: [
                     Icon(Icons.folder_rounded, color: AppColors.primaryPink, size: 20),
                     SizedBox(width: 12),
                     Text('category'),

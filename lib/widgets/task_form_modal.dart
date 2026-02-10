@@ -18,6 +18,7 @@ class TaskFormModal extends StatefulWidget {
   final Function(Category) onAddCategory;
   final Function(Category) onUpdateCategory;
   final Function(String) onDeleteCategory;
+  final FirestoreService firestoreService;
 
   const TaskFormModal({
     super.key,
@@ -28,6 +29,7 @@ class TaskFormModal extends StatefulWidget {
     required this.onAddCategory,
     required this.onUpdateCategory,
     required this.onDeleteCategory,
+    required this.firestoreService,
   });
 
   @override
@@ -677,6 +679,9 @@ class _TaskFormModalState extends State<TaskFormModal> {
             isScrollControlled: true,
             backgroundColor: Colors.transparent,
             builder: (context) => CategoryFormModal(
+              firestoreService: widget.firestoreService,
+              currentCategories: widget.availableCategories,
+              existingCategories: widget.availableCategories,
               onSave: (newCategory) {
                 widget.onAddCategory(newCategory);
                 setState(() => _selectedCategoryName = newCategory.name);
@@ -745,6 +750,9 @@ class _TaskFormModalState extends State<TaskFormModal> {
                 backgroundColor: Colors.transparent,
                 builder: (context) => CategoryFormModal(
                   category: category,
+                  existingCategories: widget.availableCategories,
+                  firestoreService: widget.firestoreService,
+                  currentCategories: widget.availableCategories,
                   onSave: (updatedCategory) {
                     widget.onUpdateCategory(updatedCategory);
                     setState(() {
