@@ -1,4 +1,3 @@
-import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -19,10 +18,10 @@ class NotificationService {
   // Notification IDs
   static const int _dailyGoodMorningId = 0;
   static const int _dailyMoodReminderId = 1;
-  static const int _birthdayNotificationId = 2; // ADDED: Birthday notification ID
+  static const int _birthdayNotificationId = 2;
   static const int _pomodoroRunningId = 100;
-  static const int _maxScheduledNotifications = 64; // Max instances to schedule for a recurring item.
-  static const int _preEventNotificationOffset = 1000000; // Large offset to ensure pre-event IDs don't collide.
+  static const int _maxScheduledNotifications = 64;
+  static const int _preEventNotificationOffset = 1000000;
 
 
   /// Generates a stable, positive 31-bit integer ID from a string.
@@ -44,18 +43,12 @@ class NotificationService {
     _notificationsEnabled = _prefs.getBool('notifications_enabled') ?? true;
     debugPrint("Notifications initially enabled: $_notificationsEnabled");
 
+    // ✅ FIXED: Use @drawable/ic_notification instead of @mipmap/ic_launcher
     const AndroidInitializationSettings initializationSettingsAndroid =
-        AndroidInitializationSettings('@mipmap/ic_launcher');
-
-    // For iOS, permissions are requested separately in _requestPermissions
-    const DarwinInitializationSettings initializationSettingsDarwin =
-        DarwinInitializationSettings();
+        AndroidInitializationSettings('@drawable/ic_notification');
 
     const InitializationSettings initializationSettings =
-        InitializationSettings(
-            android: initializationSettingsAndroid,
-            iOS: initializationSettingsDarwin,
-            macOS: initializationSettingsDarwin);
+        InitializationSettings(android: initializationSettingsAndroid);
 
     await _notificationsPlugin.initialize(
       initializationSettings,
@@ -69,16 +62,48 @@ class NotificationService {
 
   /// Sets the local timezone using the reliable flutter_timezone package.
   Future<void> _initializeTimezone() async {
-    tz.initializeTimeZones();
     try {
-      final String timeZoneName = await FlutterTimezone.getLocalTimezone();
+      tz.initializeTimeZones();
+      // flutter_timezone 5.x - cast to String
+      final timeZoneName = (await FlutterTimezone.getLocalTimezone()
+          .timeout(const Duration(seconds: 3))) as String;
       tz.setLocalLocation(tz.getLocation(timeZoneName));
       debugPrint("Timezone successfully set via flutter_timezone: $timeZoneName");
     } catch (e) {
-      debugPrint("CRITICAL: Failed to get local timezone. Error: $e. Falling back to UTC.");
-      tz.setLocalLocation(tz.getLocation('Etc/UTC'));
+      debugPrint("Timezone error: $e");
+      tz.setLocalLocation(tz.getLocation('UTC'));
     }
   }
+
+  Future<void> debugTestNotification(BuildContext context) async {
+  final AndroidFlutterLocalNotificationsPlugin? androidPlugin =
+      _notificationsPlugin.resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>();
+
+  if (androidPlugin != null) {
+    final bool? granted =
+        await androidPlugin.requestNotificationsPermission();
+    debugPrint("POST_NOTIFICATIONS granted: $granted");
+  }
+
+  await _notificationsPlugin.show(
+    999,
+    'test',
+    'this should appear immediately',
+    const NotificationDetails(
+      android: AndroidNotificationDetails(
+        'test_channel',
+        'test channel',
+        channelDescription: 'test',
+        importance: Importance.max,
+        priority: Priority.high,
+        icon: '@drawable/ic_notification',
+      ),
+    ),
+  );
+}
+
+
 
   /// Schedules a reminder for a task or event, with robust support for recurrence.
   Future<void> scheduleReminderNotification({
@@ -90,7 +115,7 @@ class NotificationService {
     required String type,
     String? recurrenceUnit,
     int? recurrenceValue,
-    DateTime? eventEndDate, // *** ADDED: To stop recurring events after their end date.
+    DateTime? eventEndDate,
   }) async {
     if (!await _requestPermissions(context)) {
       debugPrint("Skipping reminder for '${title.toLowerCase()}' due to permissions.");
@@ -101,7 +126,7 @@ class NotificationService {
     String notificationBody;
 
     if (type == 'task') {
-      notificationTitle = '🐝 buzz buzz — this task needs a hug (and finishing) right now!';
+      notificationTitle = '🐝 buzz buzz - this task needs a hug (and finishing) right now!';
       notificationBody = title.toLowerCase();
     } else { // 'event'
       notificationTitle = '🐣 psst... your event just started!';
@@ -113,8 +138,8 @@ class NotificationService {
         'reminder_channel', 'reminders',
         channelDescription: 'notifications for tasks and events.',
         importance: Importance.high, priority: Priority.high,
+        icon: '@drawable/ic_notification',
       ),
-      iOS: DarwinNotificationDetails(presentAlert: true, presentBadge: true, presentSound: true),
     );
     final payload = jsonEncode({'screen': type == 'task' ? 'tasks' : 'calendar'});
 
@@ -135,7 +160,6 @@ class NotificationService {
           case 'day':
             nextDate = scheduledDate.add(Duration(days: i * val));
             break;
-          // *** MODIFIED: Add 'week' case for recurrence. ***
           case 'week':
             nextDate = scheduledDate.add(Duration(days: i * val * 7));
             break;
@@ -151,7 +175,7 @@ class NotificationService {
           continue; // Skip past or invalid dates
         }
 
-        // *** MODIFIED: Stop scheduling recurring events if they are past their end date. ***
+        // Stop scheduling recurring events if they are past their end date.
         if (type == 'event' && eventEndDate != null && nextDate.isAfter(eventEndDate)) {
           debugPrint("Stopping recurring schedule for '$title' as it has passed the event's end date.");
           break;
@@ -162,12 +186,13 @@ class NotificationService {
         }
 
         await _notificationsPlugin.zonedSchedule(
-          id + i, // Use a unique ID for each instance in the series
+          id + i,
           notificationTitle,
           notificationBody,
           tz.TZDateTime.from(nextDate, tz.local),
           notificationDetails,
-          androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+          androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+          uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
           payload: payload,
         );
       }
@@ -185,167 +210,131 @@ class NotificationService {
     }
 
     await _notificationsPlugin.zonedSchedule(
-      id, // The base ID is used for the single instance
+      id,
       notificationTitle,
       notificationBody,
       tz.TZDateTime.from(scheduledDate, tz.local),
       notificationDetails,
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
       payload: payload,
     );
-    debugPrint("Scheduled one-time reminder for '$title' at $scheduledDate");
+    debugPrint("Scheduled ${type == 'task' ? 'task' : 'event'} notification for '$title' at $scheduledDate.");
   }
 
-  /// Helper to schedule the 10-minute pre-event reminder
-  Future<void> _schedulePreEventNotification(int baseId, String title, DateTime eventDate, String payload, NotificationDetails details) async {
-      final preNotificationDateTime = eventDate.subtract(const Duration(minutes: 10));
-      if (preNotificationDateTime.isAfter(DateTime.now())) {
-        final int preEventId = baseId + _preEventNotificationOffset;
-        await _notificationsPlugin.zonedSchedule(
-          preEventId,
-          'almost time! your event starts in 10 mins ⏳',
-          title.toLowerCase(),
-          tz.TZDateTime.from(preNotificationDateTime, tz.local),
-          details,
-          androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-          payload: payload,
-        );
-      }
-  }
+  /// Schedules a notification 15 minutes before an event starts.
+  void _schedulePreEventNotification(
+    int baseId,
+    String title,
+    DateTime eventStart,
+    String payload,
+    NotificationDetails details,
+  ) {
+    final preEventTime = eventStart.subtract(const Duration(minutes: 15));
 
-  /// Cancels all notifications associated with a given base ID.
-  Future<void> cancelNotification(int id) async {
-    for (int i = 0; i < _maxScheduledNotifications; i++) {
-      await _notificationsPlugin.cancel(id + i);
+    if (preEventTime.isBefore(DateTime.now())) {
+      debugPrint("Skipping pre-event notification for '$title' as it would be in the past.");
+      return;
     }
+
+    _notificationsPlugin.zonedSchedule(
+      baseId + _preEventNotificationOffset,
+      '⏰ heads up!',
+      '${title.toLowerCase()} starts in 15 minutes',
+      tz.TZDateTime.from(preEventTime, tz.local),
+      details,
+      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+      payload: payload,
+    );
+    debugPrint("Scheduled pre-event notification for '$title' at $preEventTime.");
+  }
+
+  /// Cancels a reminder notification by ID.
+  Future<void> cancelReminderNotification(int id) async {
+    await _notificationsPlugin.cancel(id);
     await _notificationsPlugin.cancel(id + _preEventNotificationOffset);
-    debugPrint("Cancelled all potential notifications for base id: $id");
+    debugPrint("Cancelled reminder notification with ID: $id");
   }
 
-  Future<void> handleInitialNotification() async {
-    final NotificationAppLaunchDetails? notificationAppLaunchDetails =
-        await _notificationsPlugin.getNotificationAppLaunchDetails();
-
-    if (notificationAppLaunchDetails?.didNotificationLaunchApp ?? false) {
-      final payload = notificationAppLaunchDetails!.notificationResponse?.payload;
-      debugPrint('App launched by notification tap. Payload: $payload');
-      await Future.delayed(const Duration(milliseconds: 500));
-      _handleNotificationTap(payload);
-    }
+  /// Cancels ALL pending notifications.
+  Future<void> cancelAllNotifications() async {
+    await _notificationsPlugin.cancelAll();
+    debugPrint("Cancelled all pending notifications.");
   }
 
-  void setNavigatorKey(GlobalKey<NavigatorState> key) {
-    _navigatorKey = key;
-  }
+  /// Returns whether notifications are globally enabled.
+  bool get areNotificationsEnabled => _notificationsEnabled;
 
-  bool get isNotificationsEnabled => _notificationsEnabled;
-
-  Future<void> setNotificationPreference(bool enabled, BuildContext context, {String? userName}) async {
+  /// Enables or disables all notifications.
+  Future<void> setNotificationsEnabled(bool enabled) async {
     _notificationsEnabled = enabled;
     await _prefs.setBool('notifications_enabled', enabled);
-    debugPrint("Notifications enabled set to: $enabled");
-
-    if (enabled) {
-      debugPrint("Notifications enabled. Scheduling daily notifications.");
-      await scheduleDailyGoodMorningNotification(context, userName: userName);
-      await scheduleDailyMoodReminderNotification(context);
-    } else {
-      await _notificationsPlugin.cancelAll();
-      debugPrint("All notifications cancelled due to preference change.");
-    }
+    debugPrint("Notifications ${enabled ? 'enabled' : 'disabled'} globally.");
   }
 
-  void _handleNotificationTap(String? payload) {
-    if (payload == null) return;
-    try {
-      final Map<String, dynamic> data = jsonDecode(payload);
-      final String? screen = data['screen'];
-      if (_navigatorKey?.currentState != null) {
-        _navigatorKey!.currentState!.popUntil((route) => route.isFirst);
-        switch (screen) {
-          case 'tasks':
-            _navigatorKey!.currentState!.pushReplacementNamed('/home', arguments: {'initialIndex': 1});
-            break;
-          case 'calendar':
-            _navigatorKey!.currentState!.pushReplacementNamed('/home', arguments: {'initialIndex': 2});
-            break;
-          case 'pomodoro':
-            _navigatorKey!.currentState!.pushReplacementNamed('/home', arguments: {'initialIndex': 3});
-            break;
-          case 'mood_tracker':
-            _navigatorKey!.currentState!.pushReplacementNamed('/home', arguments: {'initialIndex': 4});
-            break;
-          default:
-            _navigatorKey!.currentState!.pushReplacementNamed('/home');
-            break;
-        }
-      } else {
-        debugPrint("Navigator key is null. Cannot navigate.");
-      }
-    } catch (e) {
-      debugPrint("Error parsing notification payload: $e");
-    }
+  /// Backward compatibility wrapper for isNotificationsEnabled
+  bool isNotificationsEnabled() => _notificationsEnabled;
+
+  /// Backward compatibility wrapper for setNotificationPreference
+  Future<void> setNotificationPreference(bool enabled) async {
+    await setNotificationsEnabled(enabled);
   }
 
-  /// FIX: Correctly requests permissions on both Android and iOS.
+  /// Backward compatibility wrapper for cancelNotification (single notification)
+  Future<void> cancelNotification(int id) async {
+    await _notificationsPlugin.cancel(id);
+    debugPrint("Cancelled notification with id=$id");
+  }
+
   Future<bool> _requestPermissions(BuildContext context) async {
-    if (!_notificationsEnabled) {
-      debugPrint("Notifications are disabled by user preference. Skipping permission request.");
-      return false;
-    }
     if (kIsWeb) return true;
 
-    if (Platform.isAndroid) {
-        final AndroidFlutterLocalNotificationsPlugin? android =
-            _notificationsPlugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
-        
-        if (android != null) {
-          final bool? hasBasicPermission = await android.requestNotificationsPermission();
-          if (hasBasicPermission == false) {
-              _showPermissionDialog(context, isExactAlarm: false);
-              return false;
-          }
-          final bool? hasExactAlarmPermission = await android.requestExactAlarmsPermission();
-          if (hasExactAlarmPermission == false) {
-              _showPermissionDialog(context, isExactAlarm: true);
-              return false;
-          }
-          return true;
-        }
-    } else if (Platform.isIOS) {
-        final bool? result = await _notificationsPlugin
-            .resolvePlatformSpecificImplementation<
-                IOSFlutterLocalNotificationsPlugin>()
-            ?.requestPermissions(
-              alert: true,
-              badge: true,
-              sound: true,
-            );
-        return result ?? false;
-    }
+    final AndroidFlutterLocalNotificationsPlugin? androidImplementation =
+        _notificationsPlugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
 
+    if (androidImplementation != null) {
+      final bool? grantedNotifications = await androidImplementation.requestNotificationsPermission();
+      debugPrint("Notification permission granted: $grantedNotifications");
+
+      if (grantedNotifications != true) {
+        if (context.mounted) _showPermissionDialog(context);
+        return false;
+      }
+
+      final bool? grantedExactAlarms = await androidImplementation.requestExactAlarmsPermission();
+      debugPrint("Exact alarm permission granted: $grantedExactAlarms");
+
+      if (grantedExactAlarms != true) {
+        debugPrint("Exact alarms not granted, but proceeding with inexact scheduling.");
+      }
+
+      return true;
+    }
     return false;
   }
 
   tz.TZDateTime _nextInstanceOf(int hour, int minute) {
     final tz.TZDateTime now = tz.TZDateTime.now(tz.local);
     tz.TZDateTime scheduledDate = tz.TZDateTime(tz.local, now.year, now.month, now.day, hour, minute);
+
     if (scheduledDate.isBefore(now)) {
       scheduledDate = scheduledDate.add(const Duration(days: 1));
     }
     return scheduledDate;
   }
 
-  Future<void> scheduleDailyGoodMorningNotification(BuildContext context, {String? userName}) async {
+  Future<void> scheduleDailyGoodMorningNotification(BuildContext context, {String name = ''}) async {
     if (!await _requestPermissions(context)) {
       debugPrint("Skipping good morning notification due to permissions.");
       return;
     }
-    // MODIFIED: This now correctly uses the passed user name.
-    final String name = (userName?.isNotEmpty ?? false) ? userName!.toLowerCase() : 'friend';
+
+    final String userName = (name.isNotEmpty) ? name.toLowerCase() : 'friend';
+
     await _notificationsPlugin.zonedSchedule(
       _dailyGoodMorningId,
-      'good morning, $name — today’s a fresh page just for you 📖🌸',
+      'good morning, $userName - today\'s a fresh page just for you 📖🌸',
       'what will you create today?',
       _nextInstanceOf(8, 0),
       const NotificationDetails(
@@ -355,14 +344,14 @@ class NotificationService {
           channelDescription: 'a notification to start your day.',
           importance: Importance.max,
           priority: Priority.high,
+          icon: '@drawable/ic_notification',
         ),
-        iOS: DarwinNotificationDetails(presentAlert: true, presentBadge: true, presentSound: true),
       ),
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
       matchDateTimeComponents: DateTimeComponents.time,
-      payload: jsonEncode({'screen': 'home'}),
     );
-    debugPrint("Daily good morning notification scheduled for 8:00 AM for user: $name");
+    debugPrint("Daily good morning notification scheduled for 8:00 AM for user: $userName");
   }
 
   Future<void> scheduleDailyMoodReminderNotification(BuildContext context) async {
@@ -372,7 +361,7 @@ class NotificationService {
     }
     await _notificationsPlugin.zonedSchedule(
       _dailyMoodReminderId,
-      'sprinkle some love on your day — take a sec to track your mood 🌷',
+      'sprinkle some love on your day - take a sec to track your mood 🌷',
       "how are you feeling today?",
       _nextInstanceOf(20, 0),
       const NotificationDetails(
@@ -382,17 +371,17 @@ class NotificationService {
           channelDescription: 'a reminder to track your mood.',
           importance: Importance.defaultImportance,
           priority: Priority.defaultPriority,
+          icon: '@drawable/ic_notification',
         ),
-        iOS: DarwinNotificationDetails(presentAlert: true, presentBadge: true, presentSound: true),
       ),
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
       matchDateTimeComponents: DateTimeComponents.time,
-      payload: jsonEncode({'screen': 'mood_tracker'}),
     );
     debugPrint("Daily mood reminder notification scheduled for 8:00 PM.");
   }
 
-  // --- FIXED: Birthday Notification Logic ---
+  // --- Birthday Notification Logic ---
 
   /// Calculates the next birthday instance.
   tz.TZDateTime _nextBirthday(DateTime birthDate) {
@@ -432,14 +421,11 @@ class NotificationService {
           channelDescription: 'get a special message on your birthday.',
           importance: Importance.max,
           priority: Priority.high,
-        ),
-        iOS: DarwinNotificationDetails(
-          presentAlert: true,
-          presentBadge: true,
-          presentSound: true,
+          icon: '@drawable/ic_notification',
         ),
       ),
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
     );
 
     debugPrint("Birthday notification scheduled for ${birthDate.month}/${birthDate.day} at 9:00 AM.");
@@ -464,10 +450,9 @@ class NotificationService {
           channelDescription: 'notification for when a pomodoro session ends.',
           importance: Importance.high,
           priority: Priority.high,
+          icon: '@drawable/ic_notification',
         ),
-        iOS: DarwinNotificationDetails(presentAlert: true, presentBadge: true, presentSound: true),
       ),
-      payload: jsonEncode({'screen': 'pomodoro'}),
     );
   }
 
@@ -490,10 +475,9 @@ class NotificationService {
           priority: Priority.low,
           ongoing: true,
           autoCancel: false,
+          icon: '@drawable/ic_notification',
         ),
-        iOS: DarwinNotificationDetails(presentAlert: true, presentBadge: false, presentSound: false),
       ),
-      payload: jsonEncode({'screen': 'pomodoro'}),
     );
   }
 
@@ -501,16 +485,14 @@ class NotificationService {
     await _notificationsPlugin.cancel(_pomodoroRunningId);
   }
 
-  void _showPermissionDialog(BuildContext context, {required bool isExactAlarm}) {
+  void _showPermissionDialog(BuildContext context) {
     if (kIsWeb) return;
     showDialog(
       context: context,
       builder: (BuildContext dialogContext) {
         return AlertDialog(
           title: const Text('Permission Required'),
-          content: Text(isExactAlarm
-              ? 'For timely reminders, please enable the "Alarms & Reminders" permission for this app in your device settings.'
-              : 'Please enable notifications for this app in your device settings to receive reminders.'),
+          content: const Text('please enable notifications for this app in your device settings to receive reminders.'),
           actions: <Widget>[
             TextButton(
               child: const Text('Cancel'),
@@ -527,6 +509,41 @@ class NotificationService {
         );
       },
     );
+  }
+
+  void _handleNotificationTap(String? payload) {
+    if (payload == null) return;
+    
+    try {
+      final data = jsonDecode(payload);
+      final screen = data['screen'];
+      
+      if (_navigatorKey?.currentState != null) {
+        switch (screen) {
+          case 'home':
+            _navigatorKey!.currentState!.pushReplacementNamed('/home');
+            break;
+          case 'tasks':
+            _navigatorKey!.currentState!.pushReplacementNamed('/tasks');
+            break;
+          case 'calendar':
+            _navigatorKey!.currentState!.pushReplacementNamed('/calendar');
+            break;
+          case 'mood_tracker':
+            _navigatorKey!.currentState!.pushReplacementNamed('/mood_tracker');
+            break;
+          case 'pomodoro':
+            _navigatorKey!.currentState!.pushReplacementNamed('/pomodoro');
+            break;
+        }
+      }
+    } catch (e) {
+      debugPrint('Error handling notification tap: $e');
+    }
+  }
+
+  void setNavigatorKey(GlobalKey<NavigatorState> key) {
+    _navigatorKey = key;
   }
 }
 

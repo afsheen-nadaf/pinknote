@@ -39,6 +39,14 @@ class DayEventsModal extends StatefulWidget {
 }
 
 class _DayEventsModalState extends State<DayEventsModal> {
+  late List<Event> _localEvents;
+
+  @override
+  void initState() {
+    super.initState();
+    _localEvents = List<Event>.from(widget.eventsForSelectedDate);
+  }
+
   void _showEventFormModal({Event? event}) {
     HapticFeedback.lightImpact();
     showModalBottomSheet(
@@ -49,12 +57,28 @@ class _DayEventsModalState extends State<DayEventsModal> {
         return EventFormModal(
           event: event,
           isNewEvent: event == null,
+          initialDate: event == null ? widget.selectedDate : null,
           onSave: (savedEvent) {
             if (event == null) {
               widget.onAddEvent(savedEvent);
+              setState(() {
+                _localEvents.add(savedEvent);
+              });
             } else {
               widget.onUpdateEvent(savedEvent);
+              setState(() {
+                final index = _localEvents.indexWhere((e) => e.id == event.id);
+                if (index != -1) {
+                  _localEvents[index] = savedEvent;
+                }
+              });
             }
+          },
+          onDelete: (eventId) {
+            widget.onDeleteEvent(eventId);
+            setState(() {
+              _localEvents.removeWhere((e) => e.id == eventId);
+            });
           },
           availableCategories: widget.availableCategories,
           onAddCategory: widget.onAddCategory,
@@ -68,15 +92,15 @@ class _DayEventsModalState extends State<DayEventsModal> {
 
   void _handleDeleteEvent(String eventId, String eventTitle) {
     widget.onDeleteEvent(eventId);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('event "${eventTitle.toLowerCase()}" deleted.', style: GoogleFonts.poppins())),
-    );
+    setState(() {
+      _localEvents.removeWhere((e) => e.id == eventId);
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final sortedEvents = List<Event>.from(widget.eventsForSelectedDate)
+    final sortedEvents = List<Event>.from(_localEvents)
       ..sort((a, b) {
         if (a.startTime != null && b.startTime != null) {
           return (a.startTime!.hour * 60 + a.startTime!.minute)

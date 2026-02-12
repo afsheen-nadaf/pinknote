@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart' as quill;
-import 'package:flutter_quill/translations.dart'; // REQUIRED for FlutterQuillLocalizations
 import 'package:flutter_localizations/flutter_localizations.dart';
 import '../utils/app_constants.dart';
-// import 'color_picker_modal.dart'; // Removed as color features are removed
 
 class CustomQuillToolbar extends StatelessWidget {
   final quill.QuillController controller;
@@ -18,27 +16,13 @@ class CustomQuillToolbar extends StatelessWidget {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     
-    // Aesthetic configuration
     final toolbarColor = isDark ? const Color(0xFF2C2C2C) : AppColors.softCream;
-    final unselectedIconColor = isDark ? AppColors.softCream : AppColors.primaryPink; // Pink in light theme
+    final unselectedIconColor = isDark ? AppColors.softCream : AppColors.primaryPink;
 
-    // Icon theme for styling
-    final iconTheme = quill.QuillIconTheme(
-      iconButtonSelectedData: quill.IconButtonData(
-        color: Colors.white, // White icon when selected
-        iconSize: 20,
-      ),
-      iconButtonUnselectedData: quill.IconButtonData(
-        color: unselectedIconColor, // Pink in light, cream in dark
-        iconSize: 20,
-      ),
-    );
-
-    // WRAPPER: Provides localization to the toolbar subtree to prevent "null" errors
     return Localizations(
       locale: const Locale('en', 'US'),
       delegates: const [
-        FlutterQuillLocalizations.delegate,
+        quill.FlutterQuillLocalizations.delegate,
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
@@ -56,7 +40,7 @@ class CustomQuillToolbar extends StatelessWidget {
           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           decoration: BoxDecoration(
             color: toolbarColor,
-            borderRadius: BorderRadius.circular(50), // Pill shape
+            borderRadius: BorderRadius.circular(50),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withOpacity(0.08),
@@ -65,87 +49,100 @@ class CustomQuillToolbar extends StatelessWidget {
               ),
             ],
           ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(50),
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // --- Formatting Group ---
-                quill.QuillToolbarToggleStyleButton(
-                  controller: controller,
-                  attribute: quill.Attribute.bold,
-                  options: quill.QuillToolbarToggleStyleButtonOptions(
-                    iconTheme: iconTheme,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(50),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Bold
+                  quill.QuillToolbarToggleStyleButton(
+                    controller: controller,
+                    attribute: quill.Attribute.bold,
+                    options: quill.QuillToolbarToggleStyleButtonOptions(
+                      iconSize: 20,
+                      iconButtonFactor: 1.0,
+                    ),
                   ),
-                ),
-                quill.QuillToolbarToggleStyleButton(
-                  controller: controller,
-                  attribute: quill.Attribute.italic,
-                  options: quill.QuillToolbarToggleStyleButtonOptions(
-                    iconTheme: iconTheme,
+                  // Italic
+                  quill.QuillToolbarToggleStyleButton(
+                    controller: controller,
+                    attribute: quill.Attribute.italic,
+                    options: quill.QuillToolbarToggleStyleButtonOptions(
+                      iconSize: 20,
+                      iconButtonFactor: 1.0,
+                    ),
                   ),
-                ),
-                quill.QuillToolbarToggleStyleButton(
-                  controller: controller,
-                  attribute: quill.Attribute.underline,
-                  options: quill.QuillToolbarToggleStyleButtonOptions(
-                    iconTheme: iconTheme,
+                  // Underline
+                  quill.QuillToolbarToggleStyleButton(
+                    controller: controller,
+                    attribute: quill.Attribute.underline,
+                    options: quill.QuillToolbarToggleStyleButtonOptions(
+                      iconSize: 20,
+                      iconButtonFactor: 1.0,
+                    ),
                   ),
-                ),
-                
-                _buildDivider(isDark),
+                  
+                  _buildDivider(isDark),
 
-                // --- Lists Group ---
-                quill.QuillToolbarToggleStyleButton(
-                  controller: controller,
-                  attribute: quill.Attribute.ol,
-                  options: quill.QuillToolbarToggleStyleButtonOptions(
-                    iconTheme: iconTheme,
+                  // Ordered List
+                  quill.QuillToolbarToggleStyleButton(
+                    controller: controller,
+                    attribute: quill.Attribute.ol,
+                    options: quill.QuillToolbarToggleStyleButtonOptions(
+                      iconSize: 20,
+                      iconButtonFactor: 1.0,
+                    ),
                   ),
-                ),
-                quill.QuillToolbarToggleStyleButton(
-                  controller: controller,
-                  attribute: quill.Attribute.ul,
-                  options: quill.QuillToolbarToggleStyleButtonOptions(
-                    iconTheme: iconTheme,
+                  // Unordered List
+                  quill.QuillToolbarToggleStyleButton(
+                    controller: controller,
+                    attribute: quill.Attribute.ul,
+                    options: quill.QuillToolbarToggleStyleButtonOptions(
+                      iconSize: 20,
+                      iconButtonFactor: 1.0,
+                    ),
                   ),
-                ),
-                
-                quill.QuillToolbarToggleCheckListButton(
-                  controller: controller,
-                  options: quill.QuillToolbarToggleCheckListButtonOptions(
-                    iconTheme: iconTheme,
+                  
+                  // Checklist
+                  quill.QuillToolbarToggleCheckListButton(
+                    controller: controller,
+                    options: quill.QuillToolbarToggleCheckListButtonOptions(
+                      iconSize: 20,
+                      iconButtonFactor: 1.0,
+                    ),
                   ),
-                ),
 
-                _buildDivider(isDark),
+                  _buildDivider(isDark),
 
-                // --- Indentation ---
-                quill.QuillToolbarIndentButton(
-                  controller: controller,
-                  isIncrease: true,
-                  options: quill.QuillToolbarIndentButtonOptions(
-                    iconTheme: iconTheme,
+                  // Indent Increase
+                  quill.QuillToolbarIndentButton(
+                    controller: controller,
+                    isIncrease: true,
+                    options: quill.QuillToolbarIndentButtonOptions(
+                      iconSize: 20,
+                      iconButtonFactor: 1.0,
+                    ),
                   ),
-                ),
-                quill.QuillToolbarIndentButton(
-                  controller: controller,
-                  isIncrease: false,
-                  options: quill.QuillToolbarIndentButtonOptions(
-                    iconTheme: iconTheme,
+                  // Indent Decrease
+                  quill.QuillToolbarIndentButton(
+                    controller: controller,
+                    isIncrease: false,
+                    options: quill.QuillToolbarIndentButtonOptions(
+                      iconSize: 20,
+                      iconButtonFactor: 1.0,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
       ),
-    )
-  );
-}
+    );
+  }
 
   Widget _buildDivider(bool isDark) {
     return Container(

@@ -6,6 +6,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:share_plus/share_plus.dart'; 
 import 'package:flutter/services.dart'; 
 import 'package:flutter_quill/flutter_quill.dart' as quill;
+import 'package:audioplayers/audioplayers.dart';
 
 import '../models/note.dart';
 import '../models/category.dart';
@@ -35,11 +36,11 @@ class NoteEditorScreen extends StatefulWidget {
 }
 
 class _NoteEditorScreenState extends State<NoteEditorScreen> with WidgetsBindingObserver {
-  // ✅ FIX 1: Declare all controllers as late final
   late final TextEditingController _titleController;
   late final quill.QuillController _quillController;
   late final ScrollController _editorScrollController;
   late final FocusNode _editorFocusNode;
+  late final AudioPlayer _audioPlayer;
   
   bool _isPinned = false;
   bool _isFavorite = false;
@@ -61,13 +62,12 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> with WidgetsBinding
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     
-    // ✅ FIX 1: Initialize EVERYTHING in initState - NEVER in build()
     _titleController = TextEditingController(text: widget.note?.title ?? '');
     _editorScrollController = ScrollController();
     _editorFocusNode = FocusNode();
+    _audioPlayer = AudioPlayer();
     _currentNoteId = widget.note?.id;
     
-    // Initialize Quill Controller with proper error handling
     _initializeQuillController();
     
     _isPinned = widget.note?.isPinned ?? false;
@@ -81,7 +81,6 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> with WidgetsBinding
 
     _canViewContent = !_isLocked || widget.isAuthenticated;
 
-    // Add listeners after all controllers are initialized
     _titleController.addListener(_onTextChanged);
     _quillController.document.changes.listen((event) {
       _onTextChanged();
@@ -100,7 +99,6 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> with WidgetsBinding
         _quillController = quill.QuillController.basic();
       }
     } catch (e) {
-      // If JSON parsing fails, treat as plain text
       final plainText = widget.note?.content ?? '';
       final doc = quill.Document()..insert(0, plainText);
       _quillController = quill.QuillController(
@@ -116,11 +114,11 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> with WidgetsBinding
     _autoSaveTimer?.cancel();
     _saveNote();
     
-    // ✅ FIX 1: Dispose all controllers in correct order
     _titleController.dispose();
     _quillController.dispose();
     _editorScrollController.dispose();
     _editorFocusNode.dispose();
+    _audioPlayer.dispose();
     super.dispose();
   }
 
@@ -188,6 +186,14 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> with WidgetsBinding
     Share.share(text);
   }
 
+  Future<void> _playFavoriteSound() async {
+    try {
+      await _audioPlayer.play(AssetSource('sounds/mark_as_important.mp3'));
+    } catch (e) {
+      debugPrint('Error playing sound: $e');
+    }
+  }
+
   void _toggleLock() {
     if (_isLocked) {
       setState(() {
@@ -196,25 +202,14 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> with WidgetsBinding
         _isDirty = true;
         _canViewContent = true;
       });
-      final theme = Theme.of(context);
-      ScaffoldMessenger.of(context)
-        ..removeCurrentSnackBar()
-        ..showSnackBar(SnackBar(
-          content: Text(
-            'note unlocked',
-            style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurface),
-          ),
-          backgroundColor: theme.cardColor,
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text("note unlocked"),
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(15.0),
-            side: BorderSide(color: AppColors.primaryPink.withOpacity(0.3)),
-          ),
-          margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
-          elevation: 6.0,
-        ));
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+        )
+      );
     } else {
-      soundService.playModalOpeningSound();
       showModalBottomSheet(
         context: context,
         isScrollControlled: true,
@@ -232,23 +227,13 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> with WidgetsBinding
                   _canViewContent = true; 
                 });
                 Navigator.pop(context);
-                final theme = Theme.of(context);
-                ScaffoldMessenger.of(context)
-                  ..removeCurrentSnackBar()
-                  ..showSnackBar(SnackBar(
-                    content: Text(
-                      'note locked',
-                      style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurface),
-                    ),
-                    backgroundColor: theme.cardColor,
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: const Text("note locked"),
                     behavior: SnackBarBehavior.floating,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(15.0),
-                      side: BorderSide(color: AppColors.primaryPink.withOpacity(0.3)),
-                    ),
-                    margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
-                    elevation: 6.0,
-                  ));
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                  )
+                );
               }
             },
           );
@@ -258,7 +243,6 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> with WidgetsBinding
   }
 
   void _showCategoryForm(BuildContext context, Category? existingCategory, List<Category> currentCategories) {
-    soundService.playModalOpeningSound();
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -280,7 +264,6 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> with WidgetsBinding
     final theme = Theme.of(context);
     final isDarkMode = theme.brightness == Brightness.dark;
     
-    // Dark mode logic: use dark background if in dark mode, otherwise use the note's selected color
     final backgroundColor = isDarkMode ? AppColors.darkBackground : Color(_selectedColorValue);
 
     return Scaffold(
@@ -311,10 +294,10 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> with WidgetsBinding
           IconButton(
             icon: Icon(
               _isFavorite ? Icons.favorite : Icons.favorite_border,
-              // Updated: Heart is red
               color: _isFavorite ? Colors.red : (isDarkMode ? Colors.white : AppColors.textDark),
             ),
             onPressed: () {
+              _playFavoriteSound();
               setState(() {
                 _isFavorite = !_isFavorite;
                 _isDirty = true;
@@ -332,7 +315,6 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> with WidgetsBinding
             icon: Icon(Icons.share_outlined, color: isDarkMode ? Colors.white : AppColors.textDark),
             onPressed: _shareNote,
           ),
-          // Updated: Archive Icon
           IconButton(
             icon: Icon(
               Icons.inventory_2, 
@@ -355,13 +337,13 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> with WidgetsBinding
           const SizedBox(width: 8),
         ],
       ),
-      body: _buildEditor(isDarkMode), // ✅ FIX 2: Always show editor, control visibility differently
+      body: _buildEditor(isDarkMode),
     );
   }
 
   Widget _buildEditor(bool isDarkMode) {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start, // Left align the date
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
@@ -386,7 +368,6 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> with WidgetsBinding
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
           child: Text(
-            // Updated: Date format lowercase and left aligned via Column's crossAxisAlignment
             "${_createdAt.day} ${_createdAt.monthName()} ${_createdAt.year}  ${_createdAt.hour}:${_createdAt.minute.toString().padLeft(2, '0')}",
             style: GoogleFonts.quicksand(
               fontSize: 12,
@@ -412,7 +393,6 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> with WidgetsBinding
 
         CustomQuillToolbar(controller: _quillController),
         
-        // ✅ CRITICAL FIX: Extract QuillEditor to separate widget to prevent rebuilds
         Expanded(
           child: _StableQuillEditor(
             controller: _quillController,
@@ -574,7 +554,6 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> with WidgetsBinding
   }
 }
 
-// ✅ CRITICAL: Separate stateful widget to isolate QuillEditor from parent rebuilds
 class _StableQuillEditor extends StatefulWidget {
   final quill.QuillController controller;
   final FocusNode focusNode;
@@ -601,37 +580,20 @@ class _StableQuillEditorState extends State<_StableQuillEditor> {
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Stack(
         children: [
-          // The actual editor - always mounted, never rebuilt
           Opacity(
             opacity: widget.canViewContent ? 1.0 : 0.0,
             child: IgnorePointer(
               ignoring: !widget.canViewContent,
               child: quill.QuillEditor(
-                // NO KEY - let Flutter manage it naturally
+                controller: widget.controller,
                 focusNode: widget.focusNode,
                 scrollController: widget.scrollController,
-                configurations: quill.QuillEditorConfigurations(
-                  controller: widget.controller,
-                  padding: const EdgeInsets.only(bottom: 20),
-                  autoFocus: false,
-                  expands: false,
-                  customStyles: quill.DefaultStyles(
-                    paragraph: quill.DefaultTextBlockStyle(
-                      GoogleFonts.quicksand(
-                        fontSize: 18,
-                        height: 1.5,
-                        color: widget.isDarkMode ? Colors.white : AppColors.textDark,
-                      ),
-                      const quill.VerticalSpacing(0, 0),
-                      const quill.VerticalSpacing(0, 0),
-                      null,
-                    ),
-                  ),
+                config: quill.QuillEditorConfig(
+                  placeholder: 'what\'s on your mind?',
                 ),
               ),
             ),
           ),
-          // Locked state overlay
           if (!widget.canViewContent)
             Center(
               child: Text(

@@ -19,6 +19,7 @@ class EventFormModal extends StatefulWidget {
   final Function(Category) onUpdateCategory;
   final Function(String) onDeleteCategory;
   final FirestoreService firestoreService; // ADDED: FirestoreService dependency
+  final DateTime? initialDate;
 
   const EventFormModal({
     super.key,
@@ -31,6 +32,7 @@ class EventFormModal extends StatefulWidget {
     required this.onUpdateCategory,
     required this.onDeleteCategory,
     required this.firestoreService, // ADDED: FirestoreService dependency
+    this.initialDate,
   });
 
   @override
@@ -62,9 +64,9 @@ class _EventFormModalState extends State<EventFormModal> {
     final event = widget.event;
     _titleController = TextEditingController(text: event?.title ?? '');
     _descriptionController = TextEditingController(text: event?.description ?? '');
-    _startDate = event?.date;
+    _startDate = event?.date ?? widget.initialDate;
     _endDate = event?.endDate;
-    _startTime = event?.startTime;
+    _startTime = event?.startTime ?? (widget.initialDate != null && event == null ? const TimeOfDay(hour: 9, minute: 0) : null);
     _endTime = event?.endTime;
     _isAlarmEnabled = event?.isAlarmEnabled ?? true;
     _isImportant = event?.isImportant ?? false;

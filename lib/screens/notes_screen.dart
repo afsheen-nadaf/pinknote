@@ -124,21 +124,25 @@ class _NotesScreenState extends State<NotesScreen> {
           // 4. Notes Grid/List
           StreamBuilder<List<Note>>(
             stream: notesService.getNotes(),
+            initialData: const [],
             builder: (context, snapshot) {
               if (snapshot.hasError) {
                 return SliverToBoxAdapter(child: _buildEmptyState(theme, 'oops! something went wrong.', icon: Icons.error_outline_rounded, iconColor: AppColors.errorRed));
               }
               
-              if (snapshot.connectionState == ConnectionState.waiting) {
+              // Use cached data instead of showing loading
+              final notes = snapshot.data ?? [];
+              
+              if (notes.isEmpty && snapshot.connectionState == ConnectionState.waiting) {
                  return const SliverFillRemaining(child: Center(child: CircularProgressIndicator(color: AppColors.primaryPink)));
               }
               
-              if (!snapshot.hasData || snapshot.data!.isEmpty) {
+              if (notes.isEmpty) {
                  return SliverToBoxAdapter(child: SizedBox(height: 300, child: _buildEmptyState(theme, 'no notes yet', icon: Icons.note_alt_outlined)));
               }
 
               // Filter Logic
-              var notes = snapshot.data!.where((note) {
+              var filteredNotes = notes.where((note) {
                 if (_searchQuery.isNotEmpty) {
                   if (!note.title.toLowerCase().contains(_searchQuery) && 
                       !note.content.toLowerCase().contains(_searchQuery)) {
@@ -152,14 +156,14 @@ class _NotesScreenState extends State<NotesScreen> {
               }).toList();
 
               // Sort Pinned notes to the top
-              notes.sort((a, b) {
+              filteredNotes.sort((a, b) {
                 if (a.isPinned != b.isPinned) {
                   return a.isPinned ? -1 : 1; 
                 }
                 return b.updatedAt.compareTo(a.updatedAt);
               });
 
-              if (notes.isEmpty) {
+              if (filteredNotes.isEmpty) {
                  return SliverToBoxAdapter(child: SizedBox(height: 300, child: _buildEmptyState(theme, 'no matches found', icon: Icons.search_off_rounded)));
               }
 
@@ -170,9 +174,9 @@ class _NotesScreenState extends State<NotesScreen> {
                     crossAxisCount: 2,
                     mainAxisSpacing: 12,
                     crossAxisSpacing: 12,
-                    childCount: notes.length,
+                    childCount: filteredNotes.length,
                     itemBuilder: (context, index) {
-                       final note = notes[index];
+                       final note = filteredNotes[index];
                        Category? category;
                        if (note.categoryId != null) {
                          try {
@@ -197,7 +201,7 @@ class _NotesScreenState extends State<NotesScreen> {
                   sliver: SliverList(
                     delegate: SliverChildBuilderDelegate(
                       (context, index) {
-                        final note = notes[index];
+                        final note = filteredNotes[index];
                          Category? category;
                          if (note.categoryId != null) {
                            try {
@@ -218,7 +222,7 @@ class _NotesScreenState extends State<NotesScreen> {
                           ),
                         );
                       },
-                      childCount: notes.length,
+                      childCount: filteredNotes.length,
                     ),
                   ),
                 );
@@ -539,63 +543,80 @@ class _NotesScreenState extends State<NotesScreen> {
   }
 
   void _showNoteOptions(BuildContext context, Note note) {
-    soundService.playModalOpeningSound();
-    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    final modalColor = isDarkMode ? Colors.black : AppColors.softCream;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!context.mounted) return;
+      
+      soundService.playModalOpeningSound();
+      final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+      final modalColor = isDarkMode ? AppColors.darkSurface : AppColors.softCream;
+      final barrierColor = isDarkMode ? AppColors.darkBackground.withOpacity(0.6) : Colors.black.withOpacity(0.3);
 
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        decoration: BoxDecoration(
-          color: modalColor,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-          border: Border.all(color: Theme.of(context).colorScheme.outline.withOpacity(0.5), width: 1.0),
+      showModalBottomSheet(
+        context: context,
+        backgroundColor: Colors.transparent,
+        barrierColor: barrierColor,
+        elevation: 10,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
         ),
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: Icon(note.isPinned ? Icons.push_pin_outlined : Icons.push_pin, color: AppColors.primaryPink),
-              title: Text(note.isPinned ? 'unpin' : 'pin'),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-              onTap: () {
-                notesService.togglePin(note.id, note.isPinned);
-                Navigator.pop(context);
-              },
-            ),
-            ListTile(
-              leading: Icon(note.isFavorite ? Icons.favorite_border : Icons.favorite, color: AppColors.errorRed),
-              title: Text(note.isFavorite ? 'unfavorite' : 'favorite'),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-              onTap: () {
-                notesService.toggleFavorite(note.id, note.isFavorite);
-                Navigator.pop(context);
-              },
-            ),
-            ListTile(
-              leading: Icon(note.isArchived ? Icons.unarchive : Icons.archive, color: AppColors.accentBlue),
-              title: Text(note.isArchived ? 'unarchive' : 'archive'),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-              onTap: () {
-                notesService.toggleArchive(note.id, note.isArchived);
-                Navigator.pop(context);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.delete_outline, color: AppColors.errorRed),
-              title: const Text('delete'),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-              onTap: () {
-                Navigator.pop(context);
-                _deleteNoteWithUndo(context, note);
-              },
-            ),
-          ],
+        builder: (context) => Container(
+          decoration: BoxDecoration(
+            color: modalColor,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+            border: Border.all(color: Theme.of(context).colorScheme.outline.withOpacity(0.5), width: 1.0),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.2),
+                blurRadius: 20,
+                offset: const Offset(0, -5),
+              ),
+            ],
+          ),
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: Icon(note.isPinned ? Icons.push_pin_outlined : Icons.push_pin, color: AppColors.primaryPink),
+                title: Text(note.isPinned ? 'unpin' : 'pin'),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                onTap: () {
+                  notesService.togglePin(note.id, note.isPinned);
+                  Navigator.pop(context);
+                },
+              ),
+              ListTile(
+                leading: Icon(note.isFavorite ? Icons.favorite_border : Icons.favorite, color: AppColors.errorRed),
+                title: Text(note.isFavorite ? 'unfavorite' : 'favorite'),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                onTap: () {
+                  notesService.toggleFavorite(note.id, note.isFavorite);
+                  Navigator.pop(context);
+                },
+              ),
+              ListTile(
+                leading: Icon(note.isArchived ? Icons.unarchive : Icons.archive, color: AppColors.accentBlue),
+                title: Text(note.isArchived ? 'unarchive' : 'archive'),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                onTap: () {
+                  notesService.toggleArchive(note.id, note.isArchived);
+                  Navigator.pop(context);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.delete_outline, color: AppColors.errorRed),
+                title: const Text('delete'),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                onTap: () {
+                  Navigator.pop(context);
+                  _deleteNoteWithUndo(context, note);
+                },
+              ),
+            ],
+          ),
         ),
-      ),
-    );
+      );
+    });
   }
 
   void _deleteNoteWithUndo(BuildContext context, Note note) {

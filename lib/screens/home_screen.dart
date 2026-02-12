@@ -610,7 +610,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           },
           child: Container(
             margin: const EdgeInsets.only(top: 16),
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
             decoration: BoxDecoration(
               color: theme.cardColor.withOpacity(0.8),
               borderRadius: BorderRadius.circular(20),
@@ -624,7 +624,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 const SizedBox(height: 8),
                 Text(
                   "routines",
-                  style: GoogleFonts.quicksand(fontSize: 16, fontWeight: FontWeight.bold),
+                  style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
               ],
             ),
@@ -665,12 +665,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  _buildDateTimeWidget(),
-                                  _buildDailyRoutinesWidget(theme),
-                                ],
+                              IntrinsicWidth(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                                  children: [
+                                    _buildDateTimeWidget(),
+                                    _buildDailyRoutinesWidget(theme),
+                                  ],
+                                ),
                               ),
                               ScaleTransition(
                                 scale: _weatherContainerScaleAnimation,

@@ -453,21 +453,26 @@ we might update the app or these rules now and then. we’ll let you know if any
                           ),
                           trailing: Switch(
                             value:
-                                notificationService.isNotificationsEnabled,
+                                notificationService.isNotificationsEnabled(),
                             onChanged: (bool value) {
-                              // **FIX:** Pass the context to the updated method.
-                              notificationService.setNotificationPreference(value, context);
+                              notificationService.setNotificationPreference(value);
                               setState(() {}); // Rebuild to reflect the change
                             },
                             activeColor: AppColors.primaryPink,
                             inactiveThumbColor: AppColors.borderLight,
                           ),
                           onTap: () {
-                            // **FIX:** Also update the onTap handler.
-                            final bool currentValue = notificationService.isNotificationsEnabled;
-                            notificationService.setNotificationPreference(!currentValue, context);
+                            final bool currentValue = notificationService.isNotificationsEnabled();
+                            notificationService.setNotificationPreference(!currentValue);
                             setState(() {}); // Rebuild to reflect the change
                           },
+                        ),
+                        const SizedBox(height: 10),
+                        ElevatedButton(
+                          onPressed: () async {
+                            await notificationService.debugTestNotification(context);
+                          },
+                          child: const Text("test notification"),
                         ),
                       ],
                     ),

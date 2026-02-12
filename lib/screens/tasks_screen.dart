@@ -539,6 +539,7 @@ class _TasksScreenState extends State<TasksScreen> with SingleTickerProviderStat
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
     );
   }
+  
 
   // --- MODIFICATION: Added week view widget ---
   /*

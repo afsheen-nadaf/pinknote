@@ -706,19 +706,21 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
   }
 
   void _confirmLogout() {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     showDialog(
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          backgroundColor: AppColors.softCream,
+          backgroundColor: isDark ? AppColors.darkGrey : AppColors.softCream,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(28),
           ),
-          title: Text('log out?', style: GoogleFonts.poppins(color: AppColors.textDark, fontWeight: FontWeight.bold)),
-          content: Text('are you sure you want to log out?', style: GoogleFonts.poppins(color: AppColors.textDark)),
+          title: Text('log out?', style: GoogleFonts.poppins(color: isDark ? Colors.white : AppColors.softCream, fontWeight: FontWeight.bold)),
+          content: Text('are you sure you want to log out?', style: GoogleFonts.poppins(color: isDark ? Colors.white70 : AppColors.softCream)),
           actions: [
             TextButton(
-              child: Text('cancel', style: GoogleFonts.poppins(color: AppColors.textDark)),
+              child: Text('cancel', style: GoogleFonts.poppins(color: isDark ? Colors.white70 : AppColors.textDark)),
               onPressed: () => Navigator.of(context).pop(),
             ),
             TextButton(
@@ -760,19 +762,21 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
 
 
   void _confirmDeleteAccount() {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     showDialog(
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          backgroundColor: AppColors.softCream,
+          backgroundColor: isDark ? AppColors.darkGrey : AppColors.softCream,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(28),
           ),
-          title: Text('delete account?', style: GoogleFonts.poppins(color: AppColors.textDark, fontWeight: FontWeight.bold)),
-          content: Text('this is a permanent action. all your data will be deleted.', style: GoogleFonts.poppins(color: AppColors.textDark)),
+          title: Text('delete account?', style: GoogleFonts.poppins(color: isDark ? Colors.white : AppColors.softCream, fontWeight: FontWeight.bold)),
+          content: Text('this is a permanent action. all your data will be deleted.', style: GoogleFonts.poppins(color: isDark ? Colors.white70 : AppColors.softCream)),
           actions: [
             TextButton(
-              child: Text('cancel', style: GoogleFonts.poppins(color: AppColors.textDark)),
+              child: Text('cancel', style: GoogleFonts.poppins(color: isDark ? Colors.white70 : AppColors.softCream)),
               onPressed: () => Navigator.of(context).pop(),
             ),
             TextButton(

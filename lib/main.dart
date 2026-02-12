@@ -10,7 +10,6 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:home_widget/home_widget.dart'; 
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_quill/flutter_quill.dart'; 
-import 'package:flutter_quill/translations.dart'; // Required for FlutterQuillLocalizations
 
 import 'package:pinknote/screens/home_screen.dart';
 import 'package:pinknote/screens/tasks_screen.dart';
@@ -38,6 +37,14 @@ final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+
+  await notificationService.init();
+  notificationService.setNavigatorKey(navigatorKey);
+
   runApp(const MyApp());
 }
 
@@ -88,9 +95,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       final prefs = await SharedPreferences.getInstance();
       _hasCompletedInitialOnboarding = prefs.getBool('has_completed_initial_onboarding') ?? false;
 
-      await notificationService.init().timeout(const Duration(seconds: 5));
-      notificationService.setNavigatorKey(navigatorKey);
-
       final status = await Permission.notification.status;
       if (status.isGranted) {
         await notificationService.scheduleDailyGoodMorningNotification(context).timeout(const Duration(seconds: 5));
@@ -137,11 +141,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             themeMode: currentThemeMode,
             // UPDATED: Standard app-level localization including FlutterQuill
             localizationsDelegates: const [
-              GlobalMaterialLocalizations.delegate,
-              GlobalWidgetsLocalizations.delegate,
-              GlobalCupertinoLocalizations.delegate,
-              FlutterQuillLocalizations.delegate, // Added this delegate
-            ],
+            FlutterQuillLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
             supportedLocales: const [
               Locale('en'),
             ],
@@ -365,42 +369,6 @@ class _AuthFlowHandlerState extends State<AuthFlowHandler> {
     return StreamBuilder<User?>(
       stream: FirebaseAuth.instance.authStateChanges(),
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return Scaffold(
-            body: Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: isDarkMode
-                      ? [AppColors.darkBackground, AppColors.darkGrey]
-                      : [AppColors.softCream, AppColors.lightPeach],
-                ),
-              ),
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const CircularProgressIndicator(
-                      color: AppColors.primaryPink,
-                      strokeWidth: 3,
-                    ),
-                    const SizedBox(height: 24),
-                    Text(
-                      'loading your workspace...',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: isDarkMode
-                            ? AppColors.lightGrey.withOpacity(0.7)
-                            : AppColors.textDark.withOpacity(0.7),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          );
-        }
-
         if (!_hasCompletedInitialOnboarding) {
           return InitialOnboardingScreen(
             firestoreService: widget.firestoreService,

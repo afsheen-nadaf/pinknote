@@ -7,7 +7,7 @@ plugins {
 
 android {
     namespace = "com.afsheen.pinknote"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 36
     ndkVersion = "27.0.12077973" // From your file
 
     // This is the modern and preferred way to set the Java version for the app module.
@@ -36,7 +36,7 @@ android {
     defaultConfig {
         applicationId = "com.afsheen.pinknote"
         minSdk = 23
-        targetSdk = flutter.targetSdkVersion
+        targetSdk = 35
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
