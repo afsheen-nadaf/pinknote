@@ -223,7 +223,7 @@ we use your info to:
 * send helpful reminders and suggestions ✨
 _we never sell your data. ever._
 
-where it’s stored ☁️
+where it's stored ☁️
 your data is stored safely using firebase, with encryption and login protection. only you can see your data unless you choose to share it.
 
 third-party stuff 🍪
@@ -241,22 +241,22 @@ hi there! welcome to your little productivity space 💌
 by using the app, you agree to these sweet and simple rules:
 
 1. personal use only 🧁
-this app is just for you and your cute plans. please don’t use it for anything illegal, spammy, or harmful.
+this app is just for you and your cute plans. please don't use it for anything illegal, spammy, or harmful.
 
 2. your account 🛠️
 if you sign in:
 * keep your login safe
-* don’t pretend to be someone else
-* you’re responsible for what you add
+* don't pretend to be someone else
+* you're responsible for what you add
 
 3. kind content only 🧼
 please keep everything you write kind and respectful. if anything harmful is found, we may remove it.
 
 4. no promises 📉
-we try our best, but the app might have bugs sometimes. it’s offered “as-is” without any fancy guarantees.
+we try our best, but the app might have bugs sometimes. it's offered "as-is" without any fancy guarantees.
 
 5. updates 🧾
-we might update the app or these rules now and then. we’ll let you know if anything major changes.
+we might update the app or these rules now and then. we'll let you know if anything major changes.
 ''';
 
     ThemeMode getMaterialThemeMode(AppThemeMode appThemeMode) {
@@ -454,25 +454,18 @@ we might update the app or these rules now and then. we’ll let you know if any
                           trailing: Switch(
                             value:
                                 notificationService.isNotificationsEnabled(),
-                            onChanged: (bool value) {
-                              notificationService.setNotificationPreference(value);
+                            onChanged: (bool value) async {
+                              await notificationService.setNotificationPreference(value);
                               setState(() {}); // Rebuild to reflect the change
                             },
                             activeColor: AppColors.primaryPink,
                             inactiveThumbColor: AppColors.borderLight,
                           ),
-                          onTap: () {
+                          onTap: () async {
                             final bool currentValue = notificationService.isNotificationsEnabled();
-                            notificationService.setNotificationPreference(!currentValue);
+                            await notificationService.setNotificationPreference(!currentValue);
                             setState(() {}); // Rebuild to reflect the change
                           },
-                        ),
-                        const SizedBox(height: 10),
-                        ElevatedButton(
-                          onPressed: () async {
-                            await notificationService.debugTestNotification(context);
-                          },
-                          child: const Text("test notification"),
                         ),
                       ],
                     ),

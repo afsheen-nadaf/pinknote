@@ -75,36 +75,6 @@ class NotificationService {
     }
   }
 
-  Future<void> debugTestNotification(BuildContext context) async {
-  final AndroidFlutterLocalNotificationsPlugin? androidPlugin =
-      _notificationsPlugin.resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin>();
-
-  if (androidPlugin != null) {
-    final bool? granted =
-        await androidPlugin.requestNotificationsPermission();
-    debugPrint("POST_NOTIFICATIONS granted: $granted");
-  }
-
-  await _notificationsPlugin.show(
-    999,
-    'test',
-    'this should appear immediately',
-    const NotificationDetails(
-      android: AndroidNotificationDetails(
-        'test_channel',
-        'test channel',
-        channelDescription: 'test',
-        importance: Importance.max,
-        priority: Priority.high,
-        icon: '@drawable/ic_notification',
-      ),
-    ),
-  );
-}
-
-
-
   /// Schedules a reminder for a task or event, with robust support for recurrence.
   Future<void> scheduleReminderNotification({
     required int id,
@@ -117,6 +87,12 @@ class NotificationService {
     int? recurrenceValue,
     DateTime? eventEndDate,
   }) async {
+    // ✅ FIXED: Check if notifications are globally disabled FIRST
+    if (!_notificationsEnabled) {
+      debugPrint("Skipping reminder for '${title.toLowerCase()}' - notifications are disabled.");
+      return;
+    }
+    
     if (!await _requestPermissions(context)) {
       debugPrint("Skipping reminder for '${title.toLowerCase()}' due to permissions.");
       return;
@@ -271,6 +247,11 @@ class NotificationService {
     _notificationsEnabled = enabled;
     await _prefs.setBool('notifications_enabled', enabled);
     debugPrint("Notifications ${enabled ? 'enabled' : 'disabled'} globally.");
+    
+    // ✅ FIXED: Cancel all notifications when disabling
+    if (!enabled) {
+      await cancelAllNotifications();
+    }
   }
 
   /// Backward compatibility wrapper for isNotificationsEnabled
@@ -325,6 +306,12 @@ class NotificationService {
   }
 
   Future<void> scheduleDailyGoodMorningNotification(BuildContext context, {String name = ''}) async {
+    // ✅ FIXED: Check if notifications are enabled
+    if (!_notificationsEnabled) {
+      debugPrint("Skipping good morning notification - notifications are disabled.");
+      return;
+    }
+    
     if (!await _requestPermissions(context)) {
       debugPrint("Skipping good morning notification due to permissions.");
       return;
@@ -355,6 +342,12 @@ class NotificationService {
   }
 
   Future<void> scheduleDailyMoodReminderNotification(BuildContext context) async {
+    // ✅ FIXED: Check if notifications are enabled
+    if (!_notificationsEnabled) {
+      debugPrint("Skipping mood reminder notification - notifications are disabled.");
+      return;
+    }
+    
     if (!await _requestPermissions(context)) {
       debugPrint("Skipping mood reminder notification due to permissions.");
       return;
@@ -402,6 +395,12 @@ class NotificationService {
     required String userName,
     required DateTime birthDate,
   }) async {
+    // ✅ FIXED: Check if notifications are enabled
+    if (!_notificationsEnabled) {
+      debugPrint("Skipping birthday notification - notifications are disabled.");
+      return;
+    }
+    
     if (!await _requestPermissions(context)) {
       debugPrint("Skipping birthday notification due to permissions.");
       return;
